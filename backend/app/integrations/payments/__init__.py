@@ -1,0 +1,1 @@
+"""Mobile money provider adapters."""

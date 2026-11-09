@@ -1,0 +1,767 @@
+APPLICATION ARCHITECTURE AND TECHNICAL GUIDE
+Online Computer Science Learning Platform
+Repository inspection date: 2026-11-09
+
+Scope and evidence
+------------------
+This document describes the code currently present in this repository. The main backend is under backend/app, and the frontend shell is under frontend_learning. The backend source, routers, SQLModel models, schemas, services, integrations, configuration, tests, and frontend source were inspected. No application source files were changed for this documentation task. No secret values from backend/.env are reproduced.
+
+The project includes a number of end-to-end paths, but it is not a complete production platform. Statements below distinguish code paths that exist from behaviors that are partial, simulated, broken, or absent. Endpoint details summarize the declared schemas and the route/service behavior; clients should use the live OpenAPI document at /docs as the authoritative wire-level schema while the noted response mismatches are corrected.
+
+01. APPLICATION OVERVIEW
+========================
+
+1.1 Purpose and users
+---------------------
+The intended product is an online learning platform for computer science courses. Students can browse published courses, enrol, access lessons, watch protected video, use learning resources, take quizzes, submit assignments, track progress, and request certificates. Teachers (represented in the database as instructors) can build courses and learning activities after administrator approval. Administrators review instructor applications and courses, create categories, manage account status, and inspect audit records.
+
+The backend has real implementations for many of those flows. The frontend now includes student/teacher signup, shared login, current-user role/status retrieval, and teacher status/dashboard views. It still lacks the course catalog, classroom, course authoring forms, media upload UI, quizzes, assignments and most broader product pages, so the complete student/teacher journeys cannot yet be completed from the supplied UI.
+
+1.2 Architecture style
+----------------------
+The backend is a modular monolith with layered organization. One FastAPI process exposes HTTP routes; routers validate and authorize requests, services implement business rules, SQLModel classes represent persisted data, and integrations wrap Cloudinary, email, and payment-provider interfaces. The modules share one database and one deployment boundary. This gives a student project clear responsibility boundaries without the operational cost of microservices.
+
+The main request path is:
+
+    HTTP client -> FastAPI middleware -> /api/v1 router -> dependencies/permissions
+      -> route handler -> service -> SQLModel Session -> PostgreSQL
+      -> response schema -> HTTP client
+
+External calls leave the service/integration boundary for Cloudinary, Resend, and (currently incomplete) MTN/Orange adapters. Direct-to-Cloudinary upload signatures let media bytes travel from a future browser client to Cloudinary; the backend then verifies asset metadata and persists references.
+
+1.3 Technologies and responsibilities
+-------------------------------------
+FastAPI provides routing, dependency injection, OpenAPI, validation and HTTP errors. Pydantic settings load configuration; Pydantic schemas validate and shape request/response data. SQLModel/SQLAlchemy map Python models to relational tables and manage sessions. PostgreSQL is the configured normal database; tests can select SQLite. PyJWT creates and validates HS256 tokens. pwdlib with its recommended password hash handles password hashing. Cloudinary stores media, Resend can send transactional email, and ReportLab creates certificate PDFs. Uvicorn serves the ASGI application. The frontend package is React 19 + TypeScript + Vite and now provides the initial registration/login/onboarding-state flow.
+
+1.4 Component diagram
+---------------------
+Mermaid source (shown as text so this file remains plain text):
+
+    graph TD
+      Browser[React/Vite shell; API flows not implemented] -->|HTTP JSON / Bearer token| FastAPI[FastAPI app: backend/app/main.py]
+      FastAPI --> Routers[API routers: backend/app/api/v1]
+      Routers --> AuthZ[JWT dependencies and ownership checks]
+      Routers --> Services[Business services]
+      Services --> Models[SQLModel models]
+      Models --> DB[(PostgreSQL; SQLite in tests)]
+      Services --> Cloudinary[Cloudinary integration]
+      Services --> Email[Resend integration, optional]
+      Services --> Pay[Payment adapter interface]
+      Pay --> Mock[Fixed-number test simulator]
+      Pay --> MTN[MTN adapter shell: not complete]
+      Pay --> Orange[Orange adapter shell: not complete]
+      Services --> PDF[ReportLab certificate PDF]
+
+The diagram describes current boundaries. The browser-to-API edge is an architectural connection, not an implemented frontend integration. The mock payment adapter works only in development/test. MTN/Orange are present as adapter shells, not functioning payment connections.
+
+1.5 Architectural limitations and improvement direction
+-------------------------------------------------------
+The most visible gap is the frontend/API disconnect. Database schema changes use metadata.create_all rather than migrations, which cannot safely evolve existing production tables. Some route handlers contain response/undefined-name problems (see sections 9 and 19). Several workflows rely on client-submitted progress values. Payment callbacks and real provider transactions are not implemented. Email delivery is optional and failures are swallowed. There is no refresh-token flow, rate limiting, or token revocation list. Recommendations are to build a frontend API layer and tests around actual journeys, repair the noted route defects, add a migration strategy before schema evolution, and complete provider callbacks with authenticated signature verification and idempotent state transitions.
+
+02. PROJECT STRUCTURE AND RESPONSIBILITIES
+==========================================
+
+2.1 Backend files
+-----------------
+backend/app/main.py creates the FastAPI app, configures CORS, initializes database tables during lifespan, includes the API router, and defines /health. backend/run.py and backend/app/cli.py are process/bootstrap utilities; the CLI includes administrator creation. backend/requirements.txt lists runtime and test packages. backend/.env.example documents configuration names; backend/.env is local configuration and must remain private. backend/docs/README.md is existing backend documentation, separate from this requested root-level guide.
+
+backend/app/core/config.py defines cached Pydantic settings and production validation. database.py builds the SQLModel engine/session dependency and create_db_and_tables(). dependencies.py loads the bearer token and current user; permissions.py contains role and ownership/access guards; security.py handles password hashes and JWTs.
+
+backend/app/models/ contains persisted SQLModel classes: user, instructor, category, course, module, lesson, resource, video, quiz/question/attempt, assignment/submission, enrolment, payment, progress/video progress, certificate, notification, and audit log. models/__init__.py imports the model classes so metadata registration sees them.
+
+backend/app/schemas/ contains API-facing schemas grouped by auth, user, course, lesson, quiz, assignment, payment, video, and progress. A schema can validate inbound data or serialize a deliberately limited response; it is not itself a database table.
+
+backend/app/api/router.py mounts versioned routers. backend/app/api/v1/ contains auth, admin, assignments, certificates, courses, enrolments, instructors, lessons, modules, payments, progress, quizzes, resources, teacher, users, and videos. A router should remain a thin HTTP boundary: dependency checks, parsing, service call, HTTP response.
+
+backend/app/services/ contains business operations for auth, assignments, certificates, Cloudinary, courses, enrolment, notifications, payments, progress, quizzes, and videos. backend/app/integrations/ contains provider-facing Cloudinary and email clients and payment adapters (base, mock, MTN, Orange). backend/app/utils/ includes file validation and PDF generation. backend/tests/ contains pytest fixtures and endpoint tests.
+
+frontend_learning/src/main.tsx mounts the React app. App.tsx provides student/teacher registration, shared login, API token handling, current-user status display and approved-teacher dashboard counts. index.css provides the interface styling. Assets include starter graphics. package.json and Vite/TypeScript configuration define development/build tooling. The frontend's README is a Vite starter README, not product documentation.
+
+2.2 Layer distinctions and request handling
+--------------------------------------------
+Models define persisted fields and database relationships. Schemas define validated public inputs and outputs. Routers expose HTTP methods and paths. Services combine domain operations across models and integrations. Dependencies load shared request context such as Session or current User. Integrations encapsulate an external provider protocol. Keeping these separate lets a route avoid embedding SQL/payment/email details and lets service rules be reused.
+
+Request lifecycle diagram:
+
+    sequenceDiagram
+      participant C as Client
+      participant A as FastAPI/router
+      participant D as Dependencies
+      participant S as Service
+      participant O as SQLModel/Session
+      participant P as PostgreSQL/provider
+      C->>A: HTTP request + JSON + optional Bearer token
+      A->>D: Resolve session/current user/role
+      D-->>A: Session and validated user, or HTTP error
+      A->>S: Validated values and actor
+      S->>O: Read/write model objects
+      O->>P: SQL or provider request
+      P-->>O: Rows/provider result
+      O-->>S: Model state
+      S-->>A: Domain result
+      A-->>C: JSON/status/redirect
+
+Representative implementation symbols (names are as defined in source):
+`main.lifespan` and `main.health` in backend/app/main.py; `database.create_db_and_tables` and `database.get_session` in core/database.py; `dependencies.get_current_user` in core/dependencies.py; `permissions.require_roles`, `permissions.require_approved_teacher_or_admin`, and `permissions.ensure_owner` in core/permissions.py; `security.hash_password`, `verify_password`, `create_access_token`, `decode_access_token`, and `create_password_reset_token` in core/security.py; `auth_service.register_student`, `register_teacher`, and `authenticate`; `instructor_service.review_teacher_registration`; `course_service.get_course`, `ensure_course_owner`, `ensure_lesson_access`, `create_course`, and `update_course`; `enrolment_service.enrol_free_course`; `payment_service.create_payment` and `verify_test_payment`; `quiz_service.grade_quiz`; `assignment_service.submit` and `grade`; `progress_service.update_lesson_progress` and `course_progress`; `certificate_service.issue_certificate`; `cloudinary_service.upload_signature`, `validate_public_id_scope`, and `verify_asset_location`; and `notification_service.notify_user`. Route handlers such as `auth.register`, `auth.register_teacher_account`, `courses.review`, `instructors.review`, `videos.playback_url`, and `resources.confirm` translate HTTP inputs into these operations.
+
+03. USER ROLES AND PERMISSION ARCHITECTURE
+==========================================
+
+3.1 Roles and meaning
+---------------------
+The User.role column is a string, normally student, teacher, or administrator. “Guest” means no authenticated User was supplied; it is not a persisted role. Student registration forces student. Teacher registration creates a User with role=teacher and a separate Instructor profile with status=pending. Role alone does not grant teacher permissions; approval status is checked for teacher operations. Administrator creation is performed through the CLI rather than public registration.
+
+Authentication answers “which active account made this request?” Authorization answers “may this account perform this action on this object?” The HTTPBearer/JWT dependency authenticates; require_roles and service ownership/access checks authorize. Role is read from the database on protected requests, rather than trusted from an editable client claim.
+
+3.2 Role assignment and privilege boundaries
+---------------------------------------------
+auth_service.register_student normalizes email, hashes the password, sets role=student, and persists User. RegisterRequest has no role field; if a client sends an unknown role, default Pydantic extra handling ignores it, and the service still assigns student. auth_service.register_teacher uses a separate TeacherRegisterRequest and hardcodes role=teacher while creating a pending Instructor row in the same database transaction. Neither endpoint accepts a trusted role from the client. Users cannot self-change roles through the profile endpoint. A CLI command creates administrators. require_approved_teacher_or_admin checks the role and current Instructor status from the database for teacher operations.
+
+JWT claims include subject UUID, password-version timestamp claim (pwd), expiration, and standard issued-at where applicable. They do not carry a role claim. get_current_user verifies JWT and loads the active user from the database, so role checks use current DB state. The production configuration rejects a default/short secret and mock payment mode.
+
+3.3 Permissions by role
+-----------------------
+Unauthenticated visitors can register, log in, browse public categories/published courses, read approved instructor profiles, and verify certificate codes. Students can use their own profile, enroll/pay, submit quizzes and assignments, and update their progress. Teachers must have teacher role; course creation additionally requires an approved Instructor profile. They manage only courses they own, including course content and grading. Administrators bypass many owner constraints and have dedicated review/management routes. Some read endpoints require authentication even when they expose published material.
+
+require_roles returns 403 for an authenticated user with an insufficient role; missing/invalid credentials are authentication errors. ensure_course_owner checks course ownership or administrator. ensure_lesson_access grants course owner/admin access, allows a published preview lesson, otherwise requires active enrolment. Ownership checks remain important even when a route also checks teacher role.
+
+3.4 Instructor application sequence
+-----------------------------------
+    sequenceDiagram
+      participant U as Prospective Teacher
+      participant API as Auth API/service
+      participant DB as Database
+      participant A as Administrator
+      U->>API: POST /api/v1/auth/register/teacher {identity, password, bio, qualifications}
+      API->>DB: Check unique email; hash password
+      API->>DB: Insert User(role=teacher) + Instructor(status=pending) atomically
+      API-->>U: Registration confirmation; login is available
+      A->>API: GET /api/v1/instructors/applications
+      API-->>A: Pending registrations with profile and account details
+      A->>API: POST /api/v1/instructors/applications/{id}/review?approved=true
+      API->>DB: Set status/reviewer/reviewed_at and audit record transactionally
+      API-->>A: Reviewed application
+
+The table is Instructor, with unique user_id, bio, qualifications, status, review_reason, reviewed_by, reviewed_at and created_at. Its one-to-one user relationship is enforced by the unique foreign key. A pending teacher can log in, but the central permission dependency denies authoring, uploads, grading and teacher dashboard operations until status=approved. Rejection leaves the account and teacher role intact for login; status=rejected blocks teacher operations and the reason is available through authenticated GET /auth/me. Rejected profiles cannot be re-registered with the same email, and there is no resubmission endpoint or teacher demotion workflow. An administrator can deactivate an account, which prevents authentication.
+
+04. AUTHENTICATION AND SESSION FLOW
+===================================
+
+4.1 Registration and login
+--------------------------
+POST /api/v1/auth/register accepts email, full_name, password. Password length is 10–128; name length 2–160; email is EmailStr. auth_service.register normalizes email and rejects duplicates, hashes through pwdlib's recommended password hasher, stores the User with student role, and attempts a welcome notification. Response is UserRead (201), which excludes password_hash.
+
+POST /api/v1/auth/login accepts email/password. The service normalizes email, verifies the stored Argon2-recommended hash, and checks is_active. On success security.py creates an HS256 JWT with sub=user UUID, pwd=password_changed_at (ISO timestamp/null), and exp. The configured access token lifetime defaults to 60 minutes. TokenResponse contains access_token and token_type=bearer. Bad credentials and inactive accounts are rejected.
+
+4.2 Protected request and logout
+--------------------------------
+The client must send Authorization: Bearer <access_token>. HTTPBearer extracts credentials; get_current_user decodes/verifies JWT, checks expiry and password-version claim, loads User, and rejects inactive accounts. Endpoints receive this user through Depends. The frontend currently has no code to store or send a token. Logout requires authentication but is stateless: it returns 204 and expects the client to discard its token. No refresh token or server-side denylist exists. Password change/reset updates password_changed_at, invalidating tokens minted against the previous password version.
+
+    sequenceDiagram
+      participant C as Client
+      participant R as Auth router
+      participant S as Auth/security service
+      participant DB as Database
+      C->>R: POST /auth/login {email,password}
+      R->>S: authenticate
+      S->>DB: Load user; verify password hash and active state
+      S-->>C: JWT {sub,pwd,exp} (bearer)
+      C->>R: Protected request + Authorization Bearer token
+      R->>S: get_current_user verifies token and version
+      S->>DB: Load current User
+      S-->>R: Active User
+      R-->>C: Endpoint response or 401/403
+
+4.3 Password reset/change
+-------------------------
+POST /auth/password-reset/request always returns a generic 202 message to reduce account enumeration. For an existing active user, the service creates a purpose=password_reset JWT with a 30-minute expiry and emails the token string; it does not construct a browser reset URL. Email failures are swallowed by the optional email integration. POST /auth/password-reset/confirm accepts token/new password, verifies purpose, account and issue time, updates the hash and password_changed_at, and returns 204. POST /auth/password/change requires the current authenticated user and current password. There is no login throttling, reset throttling, recovery code, or session revocation table. Never commit real secret values; .env is local secret-bearing configuration.
+
+05. COMPLETE API ENDPOINT DOCUMENTATION
+=======================================
+
+5.1 Reading the endpoint inventory
+----------------------------------
+All paths below are prefixed with /api/v1 unless explicitly shown otherwise. “Auth” means a valid active bearer token; role requirements and ownership are listed separately. Successful reads and ordinary updates use 200 unless a route says otherwise. Explicit success exceptions include creation routes that declare 201, password-reset request 202, and logout/password change/password reset confirmation/video deletion 204. Common HTTP failures include 400 for invalid reset/confirmation flows, 401 for missing/invalid authentication, 402 for trying free enrolment of a paid course, 403 for role/ownership/access denial, 404 for missing records, 409 for duplicate or invalid lifecycle conflicts, 422 for schema validation, 501 for unimplemented real payment/callback paths, 503 for unavailable provider configuration, and 500 for unhandled defects. The app's OpenAPI at /docs gives exact generated field schemas. Response summaries below describe the current route behavior; DB reads/writes and external calls are identified in each effect/notes field and the relevant workflow sections. Section 19 calls out observed mismatches.
+
+5.2 Authentication
+------------------
+METHOD | PATH | ACCESS | REQUEST -> RESPONSE | EFFECT / NOTES
+POST | /auth/register | Public | RegisterRequest {email,full_name,password} -> UserRead (201) | Calls auth_service.register_student; creates student User; duplicate email rejected.
+POST | /auth/register/teacher | Public | TeacherRegisterRequest {email,full_name,password,bio,qualifications} -> TeacherRegistrationResponse (201) | Atomically creates teacher User and pending Instructor profile; returns instructor_id and approval message; duplicate email is 409.
+POST | /auth/login | Public | LoginRequest {email,password} -> TokenResponse {access_token,token_type} | Verifies hash and active status; JWT.
+POST | /auth/logout | Auth | none -> 204 | Stateless; client discards token.
+GET | /auth/me | Auth | none -> UserRead | Current account.
+PATCH | /auth/me | Auth | profile update schema (full_name) -> UserRead | Updates own profile.
+POST | /auth/password-reset/request | Public | PasswordResetRequest {email} -> generic message (202) | May send 30-minute reset token by email.
+POST | /auth/password-reset/confirm | Public | PasswordReset {token,new_password} -> 204 | Changes password, invalidates earlier token versions.
+POST | /auth/password/change | Auth | PasswordChange {current_password,new_password} -> 204 | Verifies current password first.
+
+5.3 Users, instructor applications, courses and categories
+-----------------------------------------------------------
+METHOD | PATH | ACCESS / OWNERSHIP | REQUEST -> RESPONSE | EFFECT / NOTES
+GET | /users/me/notifications | Auth | none -> latest notification records (up to 100) | Reads own notifications; no mark-read route.
+GET | /instructors/applications | Admin | none -> pending Instructor rows | Review queue.
+GET | /instructors/registrations | Admin | optional status_filter=pending|approved|rejected -> InstructorAdminRead[] | Includes prior decisions.
+GET | /instructors/registrations/{registration_id} | Admin | Instructor UUID -> InstructorAdminRead | Includes email, name, biography, qualifications and review metadata.
+GET | /instructors/{user_id}/profile | Public | path user UUID -> approved public instructor profile | Only approved profile should be exposed.
+POST | /instructors/applications/{application_id}/review | Admin | query approved bool, optional reason -> InstructorAdminRead | Transactionally updates status/reviewer/time and audit log; notifies teacher afterward.
+GET | /courses/categories | Public | none -> active categories | Category listing.
+GET | /courses/mine | Teacher/Admin | none -> CourseRead[] | Teacher sees own courses; admin list behavior per service.
+GET | /courses | Public | q?, category_id?, limit (20, max 100), offset -> CourseRead[] | Published search/list.
+GET | /courses/{course_id} | Public | course UUID -> CourseRead | Published course only.
+POST | /courses | Teacher/Admin | CourseCreate -> CourseRead (201) | Teacher must be approved; creates draft.
+PATCH | /courses/{course_id} | Owner/Admin | CourseCreate -> CourseRead | Despite PATCH, schema is full CourseCreate, not partial update; may return published course to draft.
+POST | /courses/{course_id}/submit | Owner/Admin | none -> CourseRead | Draft/rejected to pending_review.
+POST | /courses/{course_id}/archive | Owner/Admin | none -> CourseRead | Archives allowed lifecycle states.
+POST | /courses/{course_id}/review | Admin | query approved bool, optional reason -> CourseRead | Pending course to published/rejected; audit/notification.
+POST | /admin/categories | Admin | CategoryInput -> category (201) | Creates category; no category edit/delete route.
+
+5.4 Modules, lessons, resources and videos
+------------------------------------------
+METHOD | PATH | ACCESS / OWNERSHIP | REQUEST -> RESPONSE | EFFECT / NOTES
+GET | /courses/{course_id}/modules | Auth | course UUID -> ModuleRead[] | Visibility guard has a published-course metadata access path for non-owner authenticated users.
+POST | /courses/{course_id}/modules | Teacher/Admin owner | ModuleCreate -> Module (201) | Adds ordered module.
+PATCH | /courses/{course_id}/modules/{module_id} | Owner/Admin | module update schema -> Module | Edits module.
+GET | /modules/{module_id}/lessons | Auth | module UUID -> LessonRead[] | Owner/admin sees all; enrolled user sees course lessons; other viewer sees previews for published course.
+POST | /modules/{module_id}/lessons | Teacher/Admin owner | LessonCreate -> LessonRead (201) | Adds lesson.
+GET | /lessons/{lesson_id} | Auth + lesson access | lesson UUID -> LessonRead | Owner/admin, preview, or active enrolment.
+PATCH | /lessons/{lesson_id} | Owner/Admin | LessonCreate -> LessonRead | Updates lesson; no lesson delete endpoint.
+POST | /resources/upload-signature?kind=image|document | Teacher/Admin | query kind -> Cloudinary signature fields | Signs direct upload; validates purpose/role.
+POST | /resources/confirm | Teacher/Admin owner | ResourceConfirmation {lesson_id,title,public_id,resource_type} -> Resource | Verifies Cloudinary metadata then stores record; current route has NameError (section 19).
+GET | /resources/lessons/{lesson_id} | Auth + lesson access | lesson UUID -> resource list intended | Builds signed download URLs; declared response annotation conflicts with dict output (section 19).
+POST | /videos/upload-signature | Teacher/Admin | upload signature request -> signature/Cloudinary parameters | Signs video upload.
+POST | /videos/confirm | Teacher/Admin owner | UploadConfirm {lesson_id,public_id} -> Video | Checks asset ownership/metadata and persists video.
+GET | /videos/{video_id}/playback | Auth + lesson access | video UUID -> {video_id,url,expires_in,duration,format} | Returns 5-minute signed private URL.
+PUT | /videos/{video_id}/progress | Student + lesson access | VideoProgressUpdate {position_seconds} -> progress fields | Stores position/furthest/watched/completed.
+GET | /videos/{video_id}/progress | Student + lesson access | video UUID -> resume progress | Student's own progress.
+POST | /videos/{video_id}/retry | Teacher/Admin owner | none -> Video | Retries metadata/status check.
+DELETE | /videos/{video_id} | Teacher/Admin owner | video UUID -> 204 | Deletes provider asset/record path.
+
+5.5 Enrolment and payments
+--------------------------
+METHOD | PATH | ACCESS / OWNERSHIP | REQUEST -> RESPONSE | EFFECT / NOTES
+POST | /enrolments/{course_id} | Student | course UUID -> Enrolment (201) | Free published course only; paid course returns 402; existing enrolment is reused/reactivated.
+GET | /enrolments/me | Auth | none -> own enrolments | Reads current user's enrolments.
+POST | /payments | Student | PaymentInitiate {course_id,provider,phone_number} -> payment summary (201) | Amount comes from course; phone is 9 digits. Live providers currently return 501/503 before usable payment.
+GET | /payments/me | Student | none -> PaymentRead[] | Own payment history; phone not returned.
+POST | /payments/{payment_id}/verify | Student, own payment | payment UUID -> PaymentRead | Test mock verification; idempotent success path.
+POST | /payments/{payment_id}/callback/{provider} | Public provider callback | path provider + callback body -> not implemented (501) | No callback signature/payment verification implementation.
+
+5.6 Quizzes and assignments
+--------------------------
+METHOD | PATH | ACCESS / OWNERSHIP | REQUEST -> RESPONSE | EFFECT / NOTES
+POST | /quizzes/lessons/{lesson_id} | Teacher/Admin owner | QuizCreate (quiz plus questions) -> quiz result (201) | Creates quiz/questions; validates question data.
+GET | /quizzes/lessons/{lesson_id} | Auth + lesson access | lesson UUID -> published quiz summaries | Lists published quizzes.
+POST | /quizzes/{quiz_id}/publish | Auth + owner check | none -> Quiz | Requires question presence; route does not explicitly require teacher role, relying on ownership/admin logic.
+GET | /quizzes/{quiz_id} | Auth + lesson access | quiz UUID -> quiz/questions without correct answers | Student-facing read.
+POST | /quizzes/{quiz_id}/attempts | Student | QuizAnswer -> attempt {id,score,passed,submitted_at} | Enrolment/access, attempt limit, answer validation and grading.
+POST | /assignments/upload-signature | Student | upload request fields -> signed Cloudinary params | Signature is not tied to a particular assignment; may create orphan upload.
+POST | /assignments/lessons/{lesson_id} | Teacher/Admin owner | AssignmentCreate -> Assignment (201) | Creates assignment.
+GET | /assignments/lessons/{lesson_id} | Auth + lesson access | lesson UUID -> assignment list | Read accessible lesson assignments.
+POST | /assignments/{assignment_id}/submissions | Student | AssignmentSubmit {text?,file_public_id?} -> AssignmentSubmission | Checks access and uploaded file ownership; upserts until graded.
+GET | /assignments/submissions/{submission_id}/file | Auth + submitter/owner/admin | submission UUID -> 307 redirect to signed URL | Time-limited private asset URL.
+POST | /assignments/submissions/{submission_id}/grade | Teacher/Admin owner | AssignmentGrade {score,feedback} -> submission | Persists grade and notifies learner.
+GET | /assignments/me/submissions | Student | none -> own submissions | No general teacher submission-list route is exposed.
+
+5.7 Progress, certificates, teacher and admin
+---------------------------------------------
+METHOD | PATH | ACCESS / OWNERSHIP | REQUEST -> RESPONSE | EFFECT / NOTES
+PUT | /progress/lessons/{lesson_id} | Student | LessonProgressUpdate {completed,last_position_seconds} -> progress summary | Completion checked against activity completion rules; client supplies intent/position.
+GET | /progress/courses/{course_id} | Auth | course UUID -> {course_id,completed_lessons,total_lessons,percentage} | Student's own progress; teacher ownership allowed; admin semantics are not useful for arbitrary learner progress.
+POST | /certificates/courses/{course_id} | Student | course UUID -> certificate record | Requires published course, active enrolment, all lesson progress complete; idempotent issuance.
+GET | /certificates/verify/{code} | Public | certificate code -> verification result | Returns validity, learner/course and issue time.
+GET | /certificates/{certificate_id}/pdf | Owner/Admin | certificate UUID -> PDF response | Generates PDF dynamically; stored pdf_url is unused.
+POST | /certificates/{certificate_id}/revoke | Admin | certificate UUID -> certificate | Marks revoked.
+GET | /teacher/dashboard | Teacher/Admin | none -> counts/dashboard dict | Teacher's own course statistics; admin view may be empty because it scopes to admin-owned courses.
+GET | /admin/users | Admin | limit, offset -> UserRead[] | Lists users.
+GET | /admin/dashboard | Admin | none -> aggregate counts | Summary stats.
+GET | /admin/courses | Admin | status_filter?, limit, offset -> courses | Moderation list.
+PATCH | /admin/users/{user_id}/status?active=bool | Admin | path/query -> UserRead/status | Activates/deactivates account.
+GET | /admin/audit-logs | Admin | limit -> audit rows | Reads recorded moderation actions.
+
+5.8 Access matrix (summary)
+---------------------------
+AREA | Public | Student | Teacher | Administrator
+Health/course catalog/category list/certificate verify | Yes | Yes | Yes | Yes
+Profile and own notifications | No | Own | Own | Own
+Teacher registration/review | Register | No application endpoint | Own status via /auth/me | List, inspect, approve/reject
+Course/content authoring | No | No | Own course, approved profile | All/administrative
+Course enrollment/payment/learning attempts | No | Own student operations | Not as student unless role permits only student checks | Admin bypass varies by route
+Uploads | No | Assignment upload as student; content upload as teacher | Content upload and own content | Content upload and bypass
+Account/course/category/audit admin | No | No | No | Yes
+
+This is a summary, not a replacement for individual endpoint dependencies. Some service ownership checks add restrictions beyond the role matrix; a few endpoints have gaps called out later.
+
+06. PYDANTIC SCHEMAS AND DATA VALIDATION
+========================================
+
+6.1 Why schemas are separate
+----------------------------
+SQLModel entities describe database persistence and relationships. API schemas constrain what clients may submit and choose what fields may be returned. This protects password hashes, provider IDs, and quiz answers from accidental exposure, and allows a request representation to differ from storage. Route signatures and response_model declarations are the code source for the actual schema contract.
+
+6.2 Important schema groups
+---------------------------
+Auth schemas in backend/app/schemas/auth.py: RegisterRequest (EmailStr, full_name length 2–160, password length 10–128); LoginRequest (email/password); TokenResponse (bearer token); PasswordResetRequest/PasswordReset; PasswordChange. User schemas in user.py define UserRead/profile update, instructor application fields, and related outputs. Registration does not accept a role. UserRead omits password_hash.
+
+Course schemas in course.py separate CourseCreate from CourseRead and category input/output. Course creation validates nonnegative XAF price and required course metadata; category selection can be nullable. Course PATCH currently takes CourseCreate, so it behaves like a full replacement of writable course fields rather than a sparse patch. Lesson schemas in lesson.py define lesson title/content, optional YouTube URL, duration, position, preview and read fields. Module routes use module schemas declared alongside course-related schemas.
+
+Quiz schemas in quiz.py represent quiz title, passing score, max attempts, publish state, question prompt/type/choices/correct answers/points/position, answer submissions and attempt output. The API must not return correct_answers in student read responses. Assignment schemas in assignment.py define title/instructions/due date/max score, submission text/file reference, and grading score/feedback. Due dates exist as data, but enforcement is absent.
+
+Payment schemas in payment.py accept course, provider (mtn/orange) and phone number; exactly nine digits are expected. Amount/currency are read from persisted payment/course values, rather than trusting a client-supplied amount. Read schemas do not expose the phone number. Video schemas in video.py cover signed upload/confirmation and playback progress. Progress schemas in progress.py accept client position and completion intent; service logic combines that input with persisted activity state.
+
+6.3 Illustrative request/response JSON
+--------------------------------------
+Registration request:
+    {
+      "email": "student@example.test",
+      "full_name": "Ada Student",
+      "password": "a-long-test-password"
+    }
+Registration response (representative UserRead fields; UUID/time values are generated):
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "email": "student@example.test",
+      "full_name": "Ada Student",
+      "role": "student",
+      "is_active": true,
+      "created_at": "2026-11-09T12:00:00Z"
+    }
+
+Teacher registration request uses the same identity/password fields plus the required professional fields:
+    {
+      "email": "teacher@example.test",
+      "full_name": "Ada Instructor",
+      "password": "a-long-test-password",
+      "bio": "Computer science educator with practical teaching experience.",
+      "qualifications": "BSc Computer Science"
+    }
+Its response contains instructor_id, a safe nested UserRead with role=teacher, instructor_status=pending, and a message explaining administrator approval. `/auth/me` adds instructor_status and instructor_review_reason for the authenticated account. Neither response includes password_hash.
+
+Login request/response:
+    {"email": "student@example.test", "password": "a-long-test-password"}
+    {"access_token": "<JWT omitted>", "token_type": "bearer"}
+
+Course create request (illustrative fields; optional description/category are omitted only when schema permits):
+    {
+      "title": "Algorithms and Data Structures",
+      "description": "Core algorithms with practical examples",
+      "category_id": "00000000-0000-0000-0000-000000000010",
+      "level": "beginner",
+      "price_xaf": 0
+    }
+The service generates/validates slug and starts the record as draft. A course review action is query-based: POST /api/v1/courses/{id}/review?approved=true (optional reason query); it has no JSON request body.
+
+Instructor application:
+    {"bio": "Computer science educator with several years of experience.",
+     "qualifications": "BSc Computer Science"}
+
+Payment initiation:
+    {"course_id": "00000000-0000-0000-0000-000000000020",
+     "provider": "mtn", "phone_number": "678241562"}
+Representative response:
+    {"id": "00000000-0000-0000-0000-000000000021",
+     "provider_reference": "generated-reference", "amount_xaf": 5000,
+     "currency": "XAF", "status": "pending", "is_simulated": true}
+In dev/test, the four accepted simulator numbers are 678241562, 678241563, 678241564, and 678241565. These are test triggers and do not represent actual money movement.
+
+Quiz answer submission and result:
+    {"answers": {"question-uuid": ["A"]}}
+    {"id": "attempt-uuid", "score": 100.0, "passed": true,
+     "submitted_at": "2026-11-09T12:00:00Z"}
+Assignment submission and progress examples:
+    {"text": "My solution and explanation"}
+    {"completed": true, "last_position_seconds": 420}
+
+These examples explain the contract shape and use fabricated identifiers. They are not execution records. Consult schemas and OpenAPI for exact optionality and response fields.
+
+07. DATABASE ARCHITECTURE AND RELATIONSHIPS
+===========================================
+
+7.1 Persistence approach
+------------------------
+Models in backend/app/models use SQLModel with UUID primary keys and PostgreSQL-compatible columns. UTC timestamps are used for created/updated/review/verification events. JSON fields hold quiz choices, correct answers, attempt answers, and audit details. Unique constraints prevent duplicate email, category slug/name as configured, course slug, student/course enrolment, provider/reference payment, assignment/student submission, student/lesson progress, video/student progress, student/course certificate, and certificate code. Foreign keys link records. There are no explicit delete cascades broadly configured; deleting parent rows may be constrained or require manual cleanup.
+
+7.2 Entity inventory
+--------------------
+MODEL | PURPOSE AND MAIN DATA | RELATIONSHIPS / CONSTRAINTS
+User | Account: email, full_name, password_hash, role, is_active, password_changed_at, timestamps. UUID PK; unique/indexed email. | ORM relations to courses, enrolments, payments, certificates, progress_records, notifications. Referenced by instructor, resources, videos, attempts, submissions, video progress and audit log, but not all have ORM back-relations.
+Instructor | Instructor profile/application: unique user_id, bio, qualifications, status, review_reason, reviewer ID, reviewed/created timestamps. | user_id and reviewed_by reference User. No ORM relation declared.
+Category | name, unique slug, description, is_active. | One-to-many courses relationship.
+Course | instructor_id, nullable category_id, title, unique indexed slug, description, level, nonnegative price_xaf, draft/pending_review/published/rejected/archive state fields, timestamps. | Instructor/User, Category, modules, enrolments, payments, certificates.
+Module | course_id, title, description, position. | Course and lessons.
+Lesson | module_id, title/content, optional youtube_url, duration, position, preview. | Module, resources, videos, quizzes, assignments, progress.
+Resource | lesson_id, uploaded_by, type, Cloudinary public ID/secure URL, MIME/size/status, created_at. | Lesson and uploader FK; lesson relationship.
+Video | lesson_id, uploaded_by, provider, public_id, secure_url, format, size, duration, processing status, created_at. | Lesson and VideoProgress.
+VideoProgress | video_id, student_id, position/furthest/watched/completed/update time. | Unique video/student and video FK; student FK, no student ORM relation.
+Quiz | lesson_id, title, passing_score=60, max_attempts=3, published. | Lesson, questions and attempts.
+Question | quiz_id, prompt, question_type, JSON choices/correct_answers, points, position. | Quiz FK/relation.
+QuizAttempt | quiz_id/student_id, JSON answers, score, passed, submitted_at. | Quiz relation and User FK; no declared student relation.
+Assignment | lesson_id, title, instructions, nullable due_at, max_score. | Lesson and submissions.
+AssignmentSubmission | assignment/student FKs, text, file URL/public ID, score/feedback/status/timestamps. | Unique assignment/student; relation to Assignment.
+Enrolment | student_id/course_id, active status, enrolled_at. | Unique student/course; relationships to User and Course.
+Payment | student_id/course_id, provider/reference, phone, amount_xaf, XAF currency, pending/succeeded/failed status, is_simulated, timestamps. | Unique provider/reference; User and Course.
+Progress | student/course/lesson, completed, last_position_seconds, updated_at. | Unique student/lesson; relationships to User/Course/Lesson.
+Certificate | student/course, unique certificate_code, nullable pdf_url, revoked, issued_at. | Unique student/course and code; User/Course.
+Notification | user_id, title, message, read, created_at. | User relationship.
+AuditLog | nullable actor_id, action, entity_type/id, JSON details, created_at. | User FK; actor relationship is not declared.
+
+7.3 Relationship diagram
+------------------------
+    erDiagram
+      USER ||--o| INSTRUCTOR : applies_as
+      USER ||--o{ COURSE : teaches
+      CATEGORY ||--o{ COURSE : categorizes
+      COURSE ||--o{ MODULE : contains
+      MODULE ||--o{ LESSON : contains
+      LESSON ||--o{ RESOURCE : references
+      LESSON ||--o{ VIDEO : contains
+      VIDEO ||--o{ VIDEO_PROGRESS : tracks
+      LESSON ||--o{ QUIZ : assesses
+      QUIZ ||--o{ QUESTION : has
+      QUIZ ||--o{ QUIZ_ATTEMPT : receives
+      LESSON ||--o{ ASSIGNMENT : sets
+      ASSIGNMENT ||--o{ ASSIGNMENT_SUBMISSION : receives
+      USER ||--o{ ENROLMENT : makes
+      COURSE ||--o{ ENROLMENT : has
+      USER ||--o{ PAYMENT : makes
+      COURSE ||--o{ PAYMENT : charges
+      USER ||--o{ PROGRESS : records
+      COURSE ||--o{ PROGRESS : tracks
+      LESSON ||--o{ PROGRESS : tracks
+      USER ||--o{ CERTIFICATE : earns
+      COURSE ||--o{ CERTIFICATE : awards
+      USER ||--o{ NOTIFICATION : receives
+      USER ||--o{ AUDIT_LOG : acts
+
+The diagram displays foreign-key relationships, not a promise that every edge also has an ORM relationship attribute. User and Instructor are separate records joined by Instructor.user_id. The quiz-attempt and assignment-submission learner foreign keys exist even where a reverse ORM navigation is not declared. The progress model points directly to student, course and lesson, while course/module/lesson hierarchy determines content ownership.
+
+7.4 Data changes in common operations
+-------------------------------------
+Student registration inserts User(role=student). Teacher registration transactionally inserts User(role=teacher) and Instructor(status=pending); admin review updates Instructor status/reviewer/time and an AuditLog row in one transaction. Rejection does not delete or disable the User. Course creation inserts Course in draft; submission/review updates status and may append AuditLog and Notification. Free enrolment inserts or reactivates Enrolment. Paid mock success updates Payment then inserts/reactivates Enrolment. Lesson completion inserts/updates Progress, with video activity also updating VideoProgress and quiz attempts/assignment submissions in their own tables. Certificate issuance inserts Certificate only after backend eligibility checks.
+
+08. COURSE CREATION AND PUBLISHING FLOW
+=======================================
+
+8.1 State and sequence
+----------------------
+An approved teacher signs in, creates a course, then adds modules and lessons and activities. Course service validates category and slug uniqueness. New course starts draft. Owner/admin submits draft or rejected course for review. Admin reviews pending_review into published or rejected, with optional reason and audit/notification. A published course edited through the current update service transitions back to draft and must be submitted again. Owner/admin can archive permitted states.
+
+    stateDiagram-v2
+      [*] --> draft: teacher creates
+      draft --> pending_review: owner submits
+      rejected --> pending_review: owner resubmits
+      pending_review --> published: admin approves
+      pending_review --> rejected: admin rejects
+      published --> draft: owner edits
+      draft --> archived: owner/admin archives
+      rejected --> archived: owner/admin archives
+      published --> archived: owner/admin archives
+
+    sequenceDiagram
+      participant T as Approved Teacher
+      participant API as Course API/service
+      participant DB as Database
+      participant A as Administrator
+      T->>API: POST /courses with CourseCreate
+      API->>DB: Verify approved instructor; insert draft Course
+      T->>API: Add modules and lessons
+      T->>API: POST /courses/{id}/submit
+      API->>DB: status=pending_review
+      A->>API: POST /courses/{id}/review?approved=true
+      API->>DB: status=published; audit and notification
+      API-->>T: CourseRead
+
+8.2 Visibility and ownership
+----------------------------
+Public course listing/detail filters for published records. Teacher access is constrained to course.instructor_id matching the current user; administrators can bypass owner checks. Lesson access is more restrictive: a published preview can be read without enrolment; other lessons require active enrolment. Admin review is separate from public visibility. Modules and lessons are created under their parent course/module to preserve the hierarchy. There is no course content approval at the individual lesson level.
+
+09. CLOUDINARY AND LEARNING RESOURCES
+=====================================
+
+9.1 Upload design
+-----------------
+The backend signs direct browser-to-Cloudinary uploads. backend/app/integrations/cloudinary.py configures the SDK, and services/cloudinary_service.py chooses upload purposes/folders, creates signatures, checks owner/purpose and retrieves metadata. This avoids routing large media bytes through FastAPI. Backend stores Cloudinary public IDs, secure URLs, MIME type, byte size and status; private downloads use short-lived signed delivery URLs.
+
+Folder configuration has a root setting and fixed/dynamic modes. Purpose folders include video, resource_image, resource_document, assignment, course_thumbnail, profile_picture and lesson_image; the existing route usage is primarily video/resources/assignment. Fixed mode signs folder and authenticated type. Dynamic mode uses asset_folder plus a separate public_id_prefix to associate the owner and purpose. The configured current root name is documented only as a folder setting, not a secret; credentials are intentionally excluded here.
+
+9.2 Content types and boundaries
+--------------------------------
+Images/documents use /resources/upload-signature with image/document kind; confirmation checks ownership, expected public ID, metadata, allowed image/PDF types and size before making a Resource. Assignment uploads use a separate student signature/submit flow and expect PDF validation. Teacher-uploaded videos use /videos/upload-signature and /videos/confirm. YouTube URLs are plain lesson metadata; they are not Cloudinary uploads. Cloudinary asset confirmation sets video ready based on metadata check rather than waiting for an asynchronous processing webhook. No webhook implementation was found.
+
+    sequenceDiagram
+      participant B as Browser/client
+      participant API as FastAPI
+      participant C as Cloudinary
+      participant DB as PostgreSQL
+      B->>API: Request signed upload parameters
+      API->>API: Authenticate; choose purpose/owner folder
+      API-->>B: Signature and upload parameters
+      B->>C: Upload file directly
+      C-->>B: public_id and secure asset result
+      B->>API: Confirm asset with lesson/assignment context
+      API->>C: Verify metadata, type, size and ownership
+      C-->>API: Canonical metadata
+      API->>DB: Persist resource/video/submission reference
+      API-->>B: Stored record
+
+The diagram shows the intended direct upload. In the present resources confirmation route, an undefined settings name raises NameError before successful confirmation can complete. Resource list output also conflicts with its declared response model (section 19). backend/app/utils/file_validation.py defines magic-byte/size validation but no route use was found; validation is mainly done against provider metadata.
+
+10. VIDEO UPLOAD AND PLAYBACK
+=============================
+
+10.1 Teacher upload
+-------------------
+Only teacher/admin roles can request a video upload signature and confirm video. Confirmation checks the lesson's owning course and the Cloudinary asset/public ID metadata, then persists a Video with provider, public ID, URL, format, size, duration and status. The current service can mark an asset ready immediately after confirmation; it does not implement provider webhook-driven processing. Retry and delete routes are teacher/admin and ownership-checked.
+
+10.2 Student playback and resume
+---------------------------------
+GET /videos/{video_id}/playback requires authentication and lesson access. The service returns a private signed URL expiring in 300 seconds, after checking whether the user owns the course, has an allowed preview, or has active enrolment. Thus the database URL alone is not intended to be public playback access. PUT/GET /videos/{video_id}/progress are student-only and store position, furthest position, watched time and completed state for the student/video pair. It enables resume across devices because state is server-persisted; client-reported events remain a trust boundary.
+
+Video completion is not identical to lesson completion. VideoProgress records media viewing. Progress records lesson completion. Course progress/certificate logic consults lesson Progress plus activity-specific completion rules, including ready video progress and quiz/assignment state. A frontend must call the relevant progress endpoints, but the frontend currently has no player or API calls.
+
+    sequenceDiagram
+      participant S as Enrolled Student
+      participant API as Video API/service
+      participant DB as Database
+      participant C as Cloudinary
+      S->>API: GET /videos/{id}/playback with Bearer token
+      API->>DB: Load video, lesson, course and enrolment
+      API->>C: Create short-lived private delivery URL
+      API-->>S: URL + duration + expires_in=300
+      S->>C: Stream video
+      S->>API: PUT /videos/{id}/progress {position_seconds}
+      API->>DB: Upsert VideoProgress
+      S->>API: GET /videos/{id}/progress
+      API-->>S: Resume position and completion state
+
+11. ENROLMENT AND PAYMENT ARCHITECTURE
+======================================
+
+11.1 Free enrolment
+-------------------
+Student POSTs /enrolments/{course_id}. The service requires a published course and price_xaf=0. It inserts an active Enrolment, or returns/reactivates the existing unique student/course record. A paid course returns 402 and must use payment. Enrollment activation is the gate used by lesson access.
+
+11.2 Paid flow and simulator
+----------------------------
+POST /payments accepts provider mtn/orange and a nine-digit phone number. The backend loads price from the Course, creates a Payment with XAF amount, provider reference, pending status and an is_simulated flag in development/test. It does not accept a client amount as authoritative. Mock verification checks one of four fixed test numbers: 678241562, 678241563, 678241564, 678241565. A valid test number moves the payment to succeeded and inserts/reactivates Enrolment; invalid number moves payment to failed. Re-verifying success is idempotent at the payment/enrolment level. This is a deterministic simulator, not a financial transaction.
+
+11.3 Provider abstractions and missing production work
+-----------------------------------------------------
+integrations/payments/base.py defines provider shape; mock.py implements the test behavior; mtn.py and orange.py represent provider adapters but currently raise 501 even when configured (missing credentials produces 503). Payment callbacks return 501. Provider API credentials alone do not complete the integration. Real work still required: initiate provider transaction, verify signed callbacks/status with provider, bind transaction references, handle retry/timeouts, atomically/idempotently update payment and enrollment, reconcile uncertain payments, and test duplicates and out-of-order events. The production settings validator prohibits mock mode.
+
+    sequenceDiagram
+      participant S as Student
+      participant API as Payment API/service
+      participant P as Adapter/provider
+      participant DB as Database
+      S->>API: POST /payments {course_id,provider,phone_number}
+      API->>DB: Read published course and authoritative price
+      API->>P: Initiate transaction (mock works; real adapters incomplete)
+      P-->>API: Reference/pending result or 501/503
+      API->>DB: Persist payment state/reference
+      S->>API: POST /payments/{id}/verify (test simulator only)
+      API->>P: Verify fixed test phone result
+      P-->>API: success/failure
+      API->>DB: Update payment; on success create/reactivate enrolment
+      API-->>S: PaymentRead
+
+12. QUIZZES, ASSIGNMENTS AND GRADING
+====================================
+
+12.1 Quizzes
+------------
+Teacher/admin owners create a quiz attached to a lesson and its questions. Question types and choice data are stored in JSON fields. Publish requires questions and owner validation. Authenticated users with lesson access can see published quiz/question content. Correct answers are deliberately omitted from student-facing read schemas. Student attempts are role-restricted; quiz service checks access/enrolment, max_attempts, answer/question validity, grades exact answer sets, computes percentage score and passed using passing_score. Defaults are passing score 60 and max attempts 3. There is no quiz timer, randomized question order, penalty logic, or manual grading. Quiz attempt data stores answers and score.
+
+12.2 Assignments
+----------------
+Teacher/admin owners create an Assignment with title, instructions, optional due_at and max_score. Students submit text and/or a signed Cloudinary PDF. The service checks lesson access and validates the uploaded asset/ownership, and updates the student's submission until graded. Teacher/admin owner grades with score/feedback; the service stores grade/status/timestamp and notifies the student. Due dates are persisted but not enforced. Students can list their submissions and access their file subject to submitter/course-owner/admin checks. There is no general teacher endpoint to enumerate all submissions for a course, which limits practical grading workflows.
+
+13. LEARNING PROGRESS AND CERTIFICATES
+======================================
+
+13.1 Progress calculation
+-------------------------
+Progress is persisted, not held only in a browser. Progress is unique per student/lesson and records completed, last_position_seconds, updated_at. A student sends an update but the service checks lesson activity state: ready videos must have completed video progress; published quizzes must be passed; assignment work must have a submission. A text-only lesson can be marked complete by the student. Course percentage is calculated server-side from completed lesson Progress rows divided by total course lessons. There is no sophisticated weighted score. Admin course-progress lookup is not equivalent to selecting a learner's progress and can reflect the admin user's own record.
+
+VideoProgress is a separate per-student/per-video resume record, with position/furthest/watched/completed. Progress endpoints support multi-device resume if the client sends updates. The client controls reported position, so this data should not be treated as tamper-proof evidence of attention.
+
+13.2 Certificates
+-----------------
+POST /certificates/courses/{course_id} requires a published course, active enrolment, at least one lesson, and completion of every lesson. Service returns existing certificate idempotently unless revoked; it generates a unique code. The route sends a notification on each request even if the certificate already existed. GET /certificates/verify/{code} is public and returns learner/course name, issue time and validity=!revoked. Authenticated owner/admin can retrieve a PDF generated dynamically with ReportLab. Certificate.pdf_url exists but is unused. Admin revocation sets revoked; verification then reports invalid.
+
+14. FRONTEND AND BACKEND COMMUNICATION
+======================================
+
+14.1 Current frontend state
+---------------------------
+frontend_learning is a React + TypeScript + Vite project. src/main.tsx creates the root and renders App under React StrictMode. src/App.tsx presents distinct student and teacher registration options; teacher signup collects biography and qualifications and calls `/auth/register/teacher`, while student signup calls `/auth/register`. Both use the existing `/auth/login` endpoint. After login, the client stores the access token in sessionStorage, calls `/auth/me` with a Bearer header, and displays student, pending teacher, rejected teacher, approved teacher, or administrator status. Approved teachers also fetch `/teacher/dashboard` counts. `VITE_API_BASE_URL` may set the API base; the default is `http://localhost:8000/api/v1`. src/index.css contains styling. Build/lint scripts are configured in package.json.
+
+The registration/login/status flow is wired, but a complete API client, route library, course pages, course authoring screens, media upload UI, quizzes, assignments, upload progress and broader loading/error workflows remain absent. The API paths documented in section 5 beyond registration/login/dashboard are backend capabilities for future client work. Client-side role display is only a usability feature; backend approval/ownership checks remain mandatory because browser code can be bypassed. The token is kept in tab-scoped sessionStorage and the current interface has no automatic session restoration on refresh.
+
+15. SECURITY ARCHITECTURE
+=========================
+
+15.1 Existing controls
+----------------------
+Control | Location | Threat reduced and limitations
+Password hashing | core/security.py, auth_service.py | Avoids storing plaintext; uses pwdlib recommended hash. No rate limiting/lockout is present.
+JWT validation | core/security.py, core/dependencies.py | Verifies signature/expiry and reloads active user. No refresh/denylist; logout alone cannot revoke token.
+Role checks | core/permissions.py and route Depends | Blocks disallowed role calls when correctly attached. Role stored as free string, not DB enum/check constraint.
+Ownership/access | permissions.py, course/resource/video/assignment services | Blocks cross-course access and checks enrollment/preview. Must be consistently called on every route.
+Input validation | Pydantic schemas/FastAPI | Rejects malformed requests; business and file checks still required.
+Upload signatures | cloudinary integration/service | Prevents arbitrary unsigned uploads and scopes ownership/purpose; signed upload validity and asset checks remain critical.
+Private media | Cloudinary signed URLs | Limits delivery duration to five minutes; URLs are bearer-like while valid.
+Payment validation | payment service | Server derives price, validates provider/phone, and uses idempotent model constraints for test path. Real provider verification is absent.
+Audit logging | moderation/service code and AuditLog | Records selected admin decisions, not every sensitive operation.
+Configuration | core/config.py | Loads env values and validates production secret and mock mode; never expose real env values.
+
+15.2 Missing protections and risks
+----------------------------------
+No request rate limiter, login lockout, reset abuse throttling, CSRF design (JWT bearer avoids cookie CSRF only if tokens are not put in cookies), refresh/revocation mechanism, security headers policy, or complete provider webhook authentication was found. `is_active` can deactivate an account but there is no role demotion/revoke-teacher workflow. Payment adapters are incomplete. Progress is client-reported. Assignment due_at is not enforced. `file_validation.py` exists but is unused by routes. CORS is configured from settings (default localhost:5173) with credentials and selected methods/headers; production origins must be constrained. Resource route defects affect security/availability and are detailed in section 19.
+
+16. ERROR HANDLING AND APPLICATION LIFECYCLE
+============================================
+
+16.1 Errors
+-----------
+FastAPI/Pydantic returns 422 for request validation errors. Service and route code raises HTTPException for expected outcomes such as not found, forbidden, duplicate, paid-course free enrollment, and unimplemented providers. Uncaught Python failures (for example the resource NameError) become server errors. External email sending is best-effort and failures are logged/converted to a false result; callers do not necessarily fail the main transaction. Database constraint violations can arise for uniqueness races; not every race has a friendly conflict translation.
+
+16.2 Startup, configuration and shutdown
+----------------------------------------
+Settings are loaded from environment and backend/.env through cached Pydantic settings. main.py creates FastAPI with lifespan; startup calls create_db_and_tables, whose metadata registration imports models before SQLModel.metadata.create_all(engine). Engine uses PostgreSQL+psycopg by default and SQLite connection args when the URL begins sqlite. Session dependency yields/closes a SQLModel Session per request. CORS allows configured origins, credentials, GET/POST/PUT/PATCH/DELETE, and Authorization/Content-Type. /health is a simple health endpoint; it should not be confused with a deep provider/database readiness check. Shutdown does not currently run a complex worker lifecycle. `create_all` creates missing tables, but does not migrate existing columns, indexes, constraints, or data.
+
+17. TESTING ARCHITECTURE
+========================
+
+17.1 Existing tests and fixtures
+--------------------------------
+backend/tests/conftest.py sets test environment values and a SQLite file under /tmp, resets metadata around tests, and creates a FastAPI TestClient. Tests are organized into test_auth.py, test_courses.py, test_enrolments.py, test_payments.py, test_quizzes.py, test_videos.py and test_cloudinary.py. Existing examples cover registration/login and role ignored behavior, course access/role checks, free vs paid enrolment, mock payments with accepted/rejected numbers and amount tampering, quiz answer hiding/grading/attempt limits, video auth/processing state, and mocked Cloudinary behavior.
+
+External dependencies should be mocked so unit/API tests do not spend money or upload real media. Test mode uses SQLite and isolated fixture setup, while the configured application uses PostgreSQL. A local test command from backend is `python -m pytest`; in this inspection environment pytest was not available to run, so test results could not be independently confirmed. The tests were inspected, not expanded or altered.
+
+17.2 Coverage gaps
+------------------
+Important absent or insufficiently covered flows include instructor apply/review/rejection/reapply, password reset/change, course moderation and ownership boundaries, module/lesson preview and enrollment behavior, resource confirmation/list response, assignment upload/submit/grade/due dates, progress prerequisites and certificate eligibility/revocation, admin routes, notification read state, provider callback security, actual Resend behavior, live MTN/Orange integration, PostgreSQL startup, and race/idempotency edge cases. Route defects should receive regression tests after correction.
+
+18. COMPLETE USER JOURNEYS
+==========================
+
+18.1 Student journey
+--------------------
+    flowchart TD
+      A[Visit public catalog] --> B[Register as student]
+      B --> C[Log in and receive JWT]
+      C --> D[Browse published course]
+      D --> E{Price is zero?}
+      E -->|Yes| F[Create/reactivate enrolment]
+      E -->|No| G[Initiate payment]
+      G --> H[Test simulator can verify; live provider incomplete]
+      H --> F
+      F --> I[Open enrolled lessons]
+      I --> J[Watch video / read resources]
+      J --> K[Pass quiz / submit assignment]
+      K --> L[Update lesson and course progress]
+      L --> M[Request eligible certificate]
+      M --> N[Download PDF or share public verification code]
+
+The current frontend supports signup, login and teacher status/dashboard display, but does not yet provide catalog, classroom, payment, resource, quiz, assignment or certificate screens. Resource confirmation/list and real payment paths also have the limitations described earlier.
+
+18.2 Teacher journey
+--------------------
+    flowchart TD
+      A[Choose Register as Teacher] --> B[Submit identity, password, bio and qualifications]
+      B --> C[Create teacher User and pending Instructor profile]
+      C --> D[Log in with the existing login endpoint]
+      D --> E{Administrator decision}
+      E -->|Reject| F[Account remains usable; teacher operations remain blocked]
+      E -->|Approve| G[Instructor status becomes approved]
+      G --> H[Create draft course]
+      H --> I[Add modules, lessons, quizzes, assignments]
+      I --> J[Sign uploads and confirm Cloudinary assets]
+      J --> K[Submit course for review]
+      K --> L{Administrator decision}
+      L -->|Reject| H
+      L -->|Publish| M[Students may discover and enrol]
+      M --> N[Review dashboard and grade owned-course submissions]
+
+The frontend provides student/teacher registration, the shared login flow, pending/rejected status screens, and approved-teacher dashboard counts. Course authoring pages and broad teacher management UI remain unimplemented. Submission enumeration is limited. Resource confirmation now imports its configured size settings, though the resources list response-model mismatch remains.
+
+18.3 Administrator journey
+--------------------------
+    flowchart TD
+      A[Create administrator through CLI] --> B[Authenticate]
+      B --> C[Review instructor applications]
+      B --> D[Review pending courses]
+      B --> E[Create categories]
+      B --> F[List users and toggle active status]
+      B --> G[View dashboard and audit logs]
+      B --> H[Revoke certificate]
+
+Administrator functionality is API-only; there is no admin UI or platform settings management interface. Admin payment, enrolment, or arbitrary learner progress management routes are not present as a complete operations console.
+
+19. REAL IMPLEMENTATION VS PLANNED FUNCTIONALITY
+================================================
+
+19.1 Status key
+---------------
+IMPLEMENTED: a code path exists with meaningful validation/business logic. This label does not claim production hardening. PARTIAL: major parts exist but a workflow is incomplete or has meaningful gaps. BROKEN: a current path has an apparent defect. MISSING: no implementation found. CANNOT VERIFY: this static inspection/environment does not prove runtime provider behavior.
+
+19.2 Feature audit
+-----------------
+FEATURE | STATUS | EVIDENCE / REMAINING WORK
+Layered FastAPI backend and route organization | Implemented | main.py, api/router.py, api/v1 and services are present.
+React frontend integration | Partial | App.tsx supports student/teacher signup, shared login, /auth/me status retrieval, and approved dashboard counts; course browsing/authoring and other product pages remain absent.
+Registration/login/password hashing/JWT | Implemented, partial hardening | Auth service and dependencies work in code; no refresh, revocation list, throttling or lockout.
+Roles and instructor approval | Implemented, incomplete lifecycle | Dedicated teacher registration creates teacher+pending Instructor; admin review updates status/reviewer/time; centralized dependency and owner checks require approval. Rejected users cannot reapply with the same email; no teacher demotion endpoint.
+Course authoring/review/publishing | Implemented | Draft/pending/published/rejected flow; course patch is full CourseCreate and edit-to-draft behavior should be considered.
+Modules/lessons/access control | Implemented, test coverage partial | Parent ownership and enrollment/preview checks exist; no lesson deletion.
+Resource uploads | Partial | settings is imported for size validation, so the former confirmation NameError is fixed. Resource GET still declares `list[Resource]` but returns dictionaries with a different shape, likely causing response validation failure; an explicit matching response schema remains needed.
+Cloudinary signatures and metadata verification | Partial | Signature/service flows exist, but no webhook processing; file_validation.py is unused by these routes. Validate all upload purposes and provider configuration in deployment.
+Video upload/playback/resume | Implemented, partial | Signed playback and persisted progress exist; no async processing/webhook; client-reported progress can be manipulated.
+Free enrolment | Implemented | Published/free checks and unique learner/course handling exist.
+Mock payment | Implemented for dev/test only | Four fixed test phone numbers drive deterministic outcome; not real payment.
+MTN/Orange payment initiation/callback | Missing/incomplete | Adapters return 501; callbacks return 501; no real provider transaction or signature verification.
+Quiz creation/publishing/automatic grading | Implemented, partial | Correct answers excluded from student reads; no timer/randomization/manual grading; publish authorization should be reviewed because route lacks an explicit role dependency.
+Assignment submission and grading | Partial | Submit/file/grade routes exist; due_at not enforced; no teacher-wide submission list; signed upload not bound to assignment at signature time.
+Progress and certificates | Implemented, partial | Backend computes percentage and eligibility; position/completion reports partly client-controlled; repeated certificate request can notify repeatedly; pdf_url unused.
+Notifications/email | Partial | Notification persistence and optional Resend; no read/mark-read API, retries/delivery guarantee.
+Admin operations/audit | Partial | User status, courses, categories, dashboard, audit and reviews exist; no full admin console/settings or comprehensive audit trail.
+Database evolution | Partial | create_all creates tables; existing schema changes are not migrated.
+Automated testing | Partial / cannot verify execution | Test suite exists with useful coverage; pytest was unavailable in the inspection environment, and important workflows remain uncovered.
+
+19.3 Specific code-level defects and boundaries
+-----------------------------------------------
+1. backend/app/api/v1/resources.py uses `settings.cloudinary_max_image_size` but does not import `settings` from app.core.config. `/api/v1/resources/confirm` therefore reaches a NameError when it evaluates the setting.
+2. The resources list handler is annotated as `list[Resource]` while building dictionaries containing an `id`/signed URL response shape that does not match Resource's persisted field set. FastAPI may validate that return value against the inferred Resource response model and fail. Declare a ResourceRead schema matching the dictionary and set response_model deliberately.
+3. Resource response schema should ensure private storage identifiers and unsigned secure URLs are not accidentally returned; the signed URL and access decision need to be the intended public contract.
+4. The frontend does not call any of these APIs, so a backend route's existence should not be described as a completed user-facing feature.
+5. Payment provider adapters and callbacks are not production integrations; do not treat credentials as proof of completed payment handling.
+
+20. HOW TO MAINTAIN AND EXTEND THE APPLICATION
+==============================================
+
+20.1 Add an endpoint
+-------------------
+First identify the owning domain and add/extend a router in backend/app/api/v1. Define inbound/outbound schemas under backend/app/schemas rather than accepting raw dictionaries. Put multi-step business rules in the corresponding backend/app/services module. Apply authentication dependencies, explicit role checks and object ownership checks. Register the router in backend/app/api/router.py if it is new. Use the session dependency and translate expected domain failures into appropriate HTTP status codes. Add tests in backend/tests for success, invalid input, wrong role, wrong owner, and relevant failure/idempotency cases.
+
+20.2 Add or change a model safely
+---------------------------------
+Define a SQLModel class in backend/app/models with UUID key, typed fields, foreign keys, nullability, unique constraints/indexes and relationships. Import it from models/__init__.py so metadata sees it. Add input/read schemas and service operations; do not expose password hashes, correct answers, private provider IDs or other internal fields by default. Update fixtures and tests. The app calls SQLModel.metadata.create_all(engine) at startup: it creates missing tables but does not alter existing tables safely. The current project has no migration system in the inspected tree. Before changing a deployed schema, plan and apply a controlled schema/data migration; this guide does not add Alembic or assume it exists.
+
+20.3 Add a role or permission
+-----------------------------
+Document the role string, decide who can be assigned it, enforce assignment only through trusted admin/workflow code, add role checks at each route, and add object ownership/access rules in services. Update response schemas and admin tools only as needed. Add negative tests proving a student cannot self-promote or access another owner's records. Frontend navigation can reflect permissions for usability but cannot enforce them.
+
+20.4 Add payment or Cloudinary behavior
+---------------------------------------
+Implement a new payment adapter against the base interface, but also implement the full lifecycle: signed/authenticated callback, provider status verification, amount/currency/reference checking, idempotent transitions and reconciliation. Never unlock access based solely on an untrusted browser success redirect. For a new Cloudinary category, add a purpose-to-folder mapping and allowed format/size rules in cloudinary_service.py, use the correct owner scope, add a route schema, verify provider metadata, and test unauthorized owners and malformed assets. Keep credentials in environment configuration and never log them.
+
+20.5 Add content types and tests
+-------------------------------
+Place content metadata under the existing Course -> Module -> Lesson structure unless a distinct relational model is justified. Define how access and completion work before adding the route. Extend progress/certificate eligibility if the activity contributes to completion. For tests, use the SQLite fixture and provider mocks; include cross-role/cross-owner cases and the integration-specific error path. Add tests for route response serialization, not just service state, to catch response-model mismatches.
+
+20.6 Operational checklist for future changes
+----------------------------------------------
+Use configuration defaults only for local development; keep production secrets private and strong. Keep CORS origins narrowly configured. Check whether a route is public by design. Confirm stored provider data is not leaked in response schemas. Verify that generated OpenAPI matches the intended client contract. Test PostgreSQL-specific behavior before deploying, since SQLite test success does not guarantee PostgreSQL correctness. Update this single guide when architecture or endpoint behavior changes, and label planned work separately from implemented behavior.
+
+END OF DOCUMENT
