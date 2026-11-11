@@ -1,7 +1,19 @@
-export default function PageHeader() {
+import type { ReactNode } from 'react';
+
+interface PageHeaderProps {
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+}
+
+export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
   return (
-    <div className="min-h-screen bg-slate-50 p-6 text-center text-slate-700">
-      <p className="text-lg font-medium">This is the PageHeader page</p>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 className="text-2xl font-semibold text-forest">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>}
+      </div>
+      {action}
     </div>
   );
 }

@@ -1,7 +1,16 @@
+import { useAuth } from '../../../../contexts/AuthContext';
+
 export default function AdminHome() {
+  const { user } = useAuth();
   return (
-    <div className="min-h-screen bg-slate-50 p-6 text-center text-slate-700">
-      <p className="text-lg font-medium">This is the Admin Home page</p>
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold text-forest">
+        Administrator dashboard
+      </h1>
+      <p className="text-ink-muted">
+        Signed in as {user?.full_name}. Platform statistics and moderation queues
+        will appear here in Step 5.
+      </p>
     </div>
   );
 }

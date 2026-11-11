@@ -1,7 +1,16 @@
-export default function LoadingState() {
+interface LoadingStateProps {
+  message?: string;
+}
+
+export function LoadingState({ message = 'Loading…' }: LoadingStateProps) {
   return (
-    <div className="min-h-screen bg-slate-50 p-6 text-center text-slate-700">
-      <p className="text-lg font-medium">This is the LoadingState page</p>
+    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-ink-muted">
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent"
+        role="status"
+        aria-label="Loading"
+      />
+      <p className="text-sm">{message}</p>
     </div>
   );
 }

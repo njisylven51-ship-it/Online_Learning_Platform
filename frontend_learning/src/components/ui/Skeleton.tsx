@@ -1,7 +1,13 @@
-export default function Skeleton() {
+import type { HTMLAttributes } from 'react';
+
+export function Skeleton({
+  className = '',
+  ...rest
+}: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className="min-h-screen bg-slate-50 p-6 text-center text-slate-700">
-      <p className="text-lg font-medium">This is the Skeleton page</p>
-    </div>
+    <div
+      className={`animate-pulse rounded-md bg-forest-tint-strong ${className}`}
+      {...rest}
+    />
   );
 }

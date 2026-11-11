@@ -1,7 +1,39 @@
-export default function Card() {
+import type { HTMLAttributes, ReactNode } from 'react';
+
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  children: ReactNode;
+}
+
+export function Card({ className = '', children, ...rest }: CardProps) {
   return (
-    <div className="min-h-screen bg-slate-50 p-6 text-center text-slate-700">
-      <p className="text-lg font-medium">This is the Card page</p>
+    <div
+      className={[
+        'rounded-xl border border-line bg-white p-5 shadow-sm',
+        className,
+      ].join(' ')}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function CardHeader({
+  title,
+  subtitle,
+  action,
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="mb-4 flex items-start justify-between gap-4">
+      <div>
+        <h2 className="text-lg font-semibold text-forest">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>}
+      </div>
+      {action}
     </div>
   );
 }
