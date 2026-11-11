@@ -8,7 +8,7 @@ export interface NavItem {
 
 export const STUDENT_NAV: NavItem[] = [
   { to: '/student/dashboard', label: 'Dashboard', icon: 'grid', end: true },
-  { to: '/courses', label: 'Browse Courses', icon: 'book' },
+  { to: '/student/courses', label: 'Browse Courses', icon: 'book' }, // <-- Updated
   { to: '/student/my-learning', label: 'My Learning', icon: 'layers' },
   { to: '/student/progress', label: 'Progress', icon: 'chart' },
   { to: '/student/certificates', label: 'Certificates', icon: 'award' },
@@ -33,12 +33,12 @@ export const ADMIN_NAV: NavItem[] = [
   { to: '/admin/profile', label: 'Profile', icon: 'user' },
 ];
 
-// Bottom nav — exactly 5 items per spec §4.2–4.4.
+// Bottom nav — exactly 5 items per spec.
 export const STUDENT_MOBILE_NAV: NavItem[] = [
   { to: '/student/dashboard', label: 'Home', icon: 'home' },
-  { to: '/courses', label: 'Courses', icon: 'book' },
-  { to: '/student/my-learning', label: 'My Learning', icon: 'layers' },
-  { to: '/student/progress', label: 'Progress', icon: 'chart' },
+  { to: '/student/courses', label: 'Learning', icon: 'book' }, // Changed to Learning
+  { to: '/student/my-learning', label: 'Library', icon: 'layers' }, // Changed to Library
+  { to: '/student/progress', label: 'Activity', icon: 'chart' }, // Changed to Activity
   { to: '/student/profile', label: 'Profile', icon: 'user' },
 ];
 

@@ -1,3 +1,7 @@
+// Auth-specific validators.
+// The backend enforces password 10–128 and full_name 2–160 (arch doc §6.2).
+// These run client-side first to avoid a round-trip for obvious mistakes.
+
 export function validateEmail(value: string): string | null {
   if (!value.trim()) return 'Email is required.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Enter a valid email address.';

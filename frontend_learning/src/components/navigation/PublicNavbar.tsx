@@ -28,17 +28,23 @@ export function PublicNavbar() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <Link to="/" className="text-lg font-bold text-forest">
-          CS <span className="text-accent">Learning</span>
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 lg:px-8">
+        <Link to="/" className="text-xl font-bold text-forest">
+          <span className="text-accent">CS</span> Learning
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-8 md:flex">
           <NavLink to="/" end className={({ isActive }) => navLink(isActive)}>
             Home
           </NavLink>
           <NavLink to="/courses" className={({ isActive }) => navLink(isActive)}>
             Courses
+          </NavLink>
+          <NavLink
+            to="/register/teacher"
+            className={({ isActive }) => navLink(isActive)}
+          >
+            Become an instructor
           </NavLink>
         </nav>
 
@@ -59,7 +65,7 @@ export function PublicNavbar() {
                 <Button variant="ghost" size="sm">Sign in</Button>
               </Link>
               <Link to="/register">
-                <Button variant="primary" size="sm">Get started</Button>
+                <Button variant="primary" size="sm">Login / Register</Button>
               </Link>
             </>
           )}
@@ -80,9 +86,12 @@ export function PublicNavbar() {
 
       {open && (
         <div className="border-t border-line bg-white md:hidden">
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4">
+          <div className="mx-auto flex max-w-screen-2xl flex-col gap-3 px-4 py-4">
             <NavLink to="/" end className={({ isActive }) => navLink(isActive)}>Home</NavLink>
             <NavLink to="/courses" className={({ isActive }) => navLink(isActive)}>Courses</NavLink>
+            <NavLink to="/register/teacher" className={({ isActive }) => navLink(isActive)}>
+              Become an instructor
+            </NavLink>
             {isAuthenticated ? (
               <>
                 <Link to={dashboardFor(role)} className={navLink(false)}>Dashboard</Link>

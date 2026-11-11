@@ -8,53 +8,56 @@ interface MobileBottomNavProps {
 
 export function MobileBottomNav({ items }: MobileBottomNavProps) {
   if (items.length !== 5) {
-    // Developer safety check per spec: exactly 5 items.
-    console.warn(
-      `MobileBottomNav expects exactly 5 items, got ${items.length}.`,
-    );
+    console.warn(`MobileBottomNav expects exactly 5 items, got ${items.length}.`);
   }
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-white lg:hidden"
+      className="fixed bottom-0 left-0 right-0 z-30 h-[64px] bg-white shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)] lg:hidden"
       aria-label="Primary"
     >
-      <ul className="mx-auto grid max-w-xl grid-cols-5">
+      <ul className="mx-auto grid h-full max-w-lg grid-cols-5">
         {items.map((item) => (
-          <li key={item.to} className="flex">
+          <li key={item.to} className="relative flex h-full items-center justify-center">
             <NavLink
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
                 [
-                  'flex flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-medium transition',
+                  'flex h-full w-full flex-col items-center justify-center transition-colors duration-200',
                   item.primary
                     ? 'relative'
                     : isActive
-                      ? 'text-accent'
-                      : 'text-ink-subtle hover:text-forest',
+                      ? 'text-accent' // <--- Green Active State
+                      : 'text-gray-400 hover:text-gray-600',
                 ].join(' ')
               }
             >
               {({ isActive }) =>
                 item.primary ? (
-                  <>
-                    <span className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-forest shadow-lg ring-4 ring-white">
-                      <NavIcon name={item.icon} className="h-6 w-6" />
-                    </span>
-                    <span className="text-forest">{item.label}</span>
-                  </>
-                ) : (
-                  <>
-                    <NavIcon name={item.icon} className="h-5 w-5" />
-                    <span>{item.label}</span>
+                  /* Floating Create Button */
+                  <div className="absolute -top-5 left-1/2 flex -translate-x-1/2 flex-col items-center">
                     <span
                       className={[
-                        'h-0.5 w-5 rounded-full transition',
-                        isActive ? 'bg-accent' : 'bg-transparent',
+                        'flex h-[50px] w-[50px] items-center justify-center rounded-full shadow-md transition',
+                        isActive
+                          ? 'bg-accent-deep text-white'
+                          : 'bg-accent text-forest hover:bg-accent-hover',
                       ].join(' ')}
-                    />
-                  </>
+                    >
+                      <NavIcon name={item.icon} className="h-7 w-7" strokeWidth={2.5} />
+                    </span>
+                  </div>
+                ) : (
+                  /* Standard Icon Only */
+                  <NavIcon
+                    name={item.name || item.icon}
+                    active={isActive}
+                    className={[
+                      'transition-all duration-200',
+                      isActive ? 'h-[26px] w-[26px] scale-110' : 'h-6 w-6',
+                    ].join(' ')}
+                  />
                 )
               }
             </NavLink>

@@ -37,3 +37,13 @@ export interface CourseQuery {
   limit?: number;
   offset?: number;
 }
+
+// Add this to the existing file
+export interface CourseCreatePayload {
+  title: string;
+  description: string;
+  category_id: string | null;
+  level: string;
+  price_xaf: number;
+}
+

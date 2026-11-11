@@ -1,42 +1,101 @@
-interface NavIconProps {
+
+import type { SVGProps } from 'react';
+
+interface NavIconProps extends SVGProps<SVGSVGElement> {
   name: string;
-  className?: string;
+  active?: boolean;
 }
 
-const PATHS: Record<string, string> = {
-  home: 'M3 11.5 12 4l9 7.5M5 10v10h14V10',
-  book: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4zm14 3v13',
-  grid: 'M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z',
-  chart: 'M4 20V10m6 10V4m6 16v-8m6 8V8',
-  award: 'M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12zm-4 0v6l4-2 4 2v-6',
-  card: 'M3 7h18v10H3zM3 11h18',
-  bell: 'M6 8a6 6 0 0 1 12 0v5l2 3H4l2-3V8zm4 11a2 2 0 0 0 4 0',
-  user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
-  settings:
-    'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm7-3a7 7 0 0 1-.1 1l2 1.6-2 3.4-2.4-1a7 7 0 0 1-1.7 1l-.4 2.6h-4l-.4-2.6a7 7 0 0 1-1.7-1l-2.4 1-2-3.4 2-1.6a7 7 0 0 1 0-2l-2-1.6 2-3.4 2.4 1a7 7 0 0 1 1.7-1l.4-2.6h4l.4 2.6a7 7 0 0 1 1.7 1l2.4-1 2 3.4-2 1.6a7 7 0 0 1 .1 1z',
-  plus: 'M12 5v14M5 12h14',
-  clipboard: 'M9 4h6v3H9zM7 7H5v13h14V7h-2M9 12l2 2 4-4',
-  users:
-    'M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm14 10v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
-  folder: 'M3 7h6l2 2h10v10H3z',
-  layers: 'M12 3 3 8l9 5 9-5-9-5zM3 13l9 5 9-5M3 18l9 5 9-5',
-  more: 'M5 12h.01M12 12h.01M19 12h.01',
+const iconPaths: Record<string, React.ReactNode> = {
+  home: (
+    <>
+      <path d="m3 10 9-7 9 7" />
+      <path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
+      <path d="M9 21v-7h6v7" />
+    </>
+  ),
+
+  book: (
+    <>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5z" />
+      <path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20" />
+      <path d="M8 7h7" />
+      <path d="M8 11h5" />
+    </>
+  ),
+
+  plus: (
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>
+  ),
+
+  clipboard: (
+    <>
+      <rect x="5" y="5" width="14" height="17" rx="2" />
+      <path d="M9 5V3h6v2" />
+      <path d="M9 11h6" />
+      <path d="M9 15h6" />
+      <path d="M9 19h3" />
+    </>
+  ),
+
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
+    </>
+  ),
+
+  grid: (
+    <>
+      <rect x="3" y="3" width="8" height="8" rx="1.5" />
+      <rect x="13" y="3" width="8" height="8" rx="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" />
+      <rect x="13" y="13" width="8" height="8" rx="1.5" />
+    </>
+  ),
+
+  chart: (
+    <>
+      <path d="M3 3v18h18" />
+      <path d="m7 14 4-4 4 3 6-7" />
+    </>
+  ),
+
+  award: (
+    <>
+      <circle cx="12" cy="8" r="6" />
+      <path d="m8.5 13-1 8 4.5-2.5 4.5 2.5-1-8" />
+      <path d="m10 8 1.5 1.5L14 7" />
+    </>
+  ),
 };
 
-export function NavIcon({ name, className = 'h-5 w-5' }: NavIconProps) {
-  const d = PATHS[name] ?? PATHS.grid;
+export function NavIcon({
+  name,
+  active = false,
+  className = 'h-6 w-6',
+  strokeWidth = 1.8,
+  ...props
+}: NavIconProps) {
+  const icon = iconPaths[name] || iconPaths.grid;
+
   return (
     <svg
-      className={className}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth={active ? 2 : strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
+      {...props}
     >
-      <path d={d} />
+      {icon}
     </svg>
   );
 }

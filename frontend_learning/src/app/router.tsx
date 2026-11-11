@@ -17,7 +17,6 @@ const CertificateVerify = lazy(
 );
 const HomePage = lazy(() => import('../features/courses/pages/HomePage'));
 
-
 const Login = lazy(() => import('../features/auth/pages/Login'));
 const Register = lazy(() => import('../features/auth/pages/Register'));
 const TeacherRegister = lazy(() => import('../features/auth/pages/TeacherRegister'));
@@ -26,7 +25,7 @@ const ResetPassword = lazy(() => import('../features/auth/pages/ResetPassword'))
 const ChangePassword = lazy(() => import('../features/auth/pages/ChangePassword'));
 
 const StudentDashboard = lazy(
-  () => import('../features/dashboard/student/pages/StudentDashboard'),
+  () => import('../features/student/pages/StudentDashboard'),
 );
 const StudentMyLearning = lazy(
   () => import('../features/student/pages/StudentMyLearning'),
@@ -114,6 +113,10 @@ export function AppRouter() {
             <Route path="student" element={<StudentLayout />}>
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<StudentDashboard />} />
+              {/* ADDED: In-built course browsing for students */}
+              <Route path="courses" element={<CourseCatalog />} />
+              <Route path="courses/:courseId" element={<CourseDetails />} />
+              {/* ------------------------------------------- */}
               <Route path="my-learning" element={<StudentMyLearning />} />
               <Route path="progress" element={<StudentProgress />} />
               <Route path="profile" element={<StudentProfile />} />

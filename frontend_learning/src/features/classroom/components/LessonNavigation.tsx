@@ -1,7 +1,21 @@
-export default function LessonNavigation() {
+import { Button } from '../../../components/ui/Button';
+
+interface LessonNavigationProps {
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}
+
+export function LessonNavigation({ hasPrev, hasNext, onPrev, onNext }: LessonNavigationProps) {
   return (
-    <div className="min-h-screen bg-slate-50 p-6 text-center text-slate-700">
-      <p className="text-lg font-medium">This is the LessonNavigation page</p>
+    <div className="mt-8 flex items-center justify-between border-t border-line pt-6">
+      <Button variant="secondary" onClick={onPrev} disabled={!hasPrev}>
+        ← Previous Lesson
+      </Button>
+      <Button variant="secondary" onClick={onNext} disabled={!hasNext}>
+        Next Lesson →
+      </Button>
     </div>
   );
 }

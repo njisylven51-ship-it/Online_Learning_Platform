@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { SearchBar } from '../../../components/common/SearchBar';
-import { Pagination } from '../../../components/common/Pagination';
+import Pagination from '../../../components/common/Pagination';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { useDebounce } from '../../../hooks/useDebounce';
