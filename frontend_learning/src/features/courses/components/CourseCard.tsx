@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../../contexts/AuthContext'; // <-- Import Auth
 import { formatCurrency } from '../../../utils/formatCurrency';
 import type { Course } from '../types';
 
 interface CourseCardProps {
   course: Course;
   categoryName?: string;
+  basePath?: string; 
 }
 
 const LEVEL_LABEL: Record<string, string> = {
@@ -13,11 +15,17 @@ const LEVEL_LABEL: Record<string, string> = {
   advanced: 'Advanced',
 };
 
-export function CourseCard({ course, categoryName }: CourseCardProps) {
-  const initials = course.slug.slice(0, 2).toUpperCase();
+export function CourseCard({ course, categoryName, basePath }: CourseCardProps) {
+  const { role } = useAuth(); // <-- Get the current role
+
+  // If a basePath is explicitly passed, use it. 
+  // Otherwise, if it's a student, route them into the app.
+  const resolvedBasePath = basePath || (role === 'student' ? '/student/courses' : '/courses');
+
+  const initials = (course.slug || course.title || 'CO').slice(0, 2).toUpperCase();
 
   return (
-    <Link to={`/courses/${course.id}`} className="group block h-full">
+    <Link to={`${resolvedBasePath}/${course.id}`} className="group block h-full">
       <div className="flex h-full flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition group-hover:-translate-y-0.5 group-hover:border-accent/60 group-hover:shadow-md">
         {/* Thumbnail */}
         <div className="relative aspect-[16/10] overflow-hidden bg-gradient-to-br from-forest to-forest-soft">

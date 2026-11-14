@@ -23,7 +23,12 @@ export default function StudentProgress() {
         <EmptyState
           title="No progress to track"
           description="Enrol in a course to start tracking your progress."
-          action={<Link to="/courses"><Button>Browse Courses</Button></Link>}
+          action={
+            /* FIXED: Changed /courses to /student/courses so it stays in the dashboard */
+            <Link to="/student/courses">
+              <Button>Browse Courses</Button>
+            </Link>
+          }
         />
       ) : (
         <div className="space-y-4">

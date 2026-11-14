@@ -52,6 +52,9 @@ const TeacherHome = lazy(
 );
 const MyCourses = lazy(() => import('../features/teacher/pages/MyCourses'));
 const CreateCourse = lazy(() => import('../features/teacher/pages/CreateCourse'));
+// ADDED: Import for EditCourse
+const EditCourse = lazy(() => import('../features/teacher/pages/EditCourse.tsx'));
+
 const TeacherAssignments = lazy(
   () => import('../features/teacher/pages/TeacherAssignments'),
 );
@@ -136,6 +139,9 @@ export function AppRouter() {
               <Route path="dashboard" element={<TeacherHome />} />
               <Route path="courses" element={<MyCourses />} />
               <Route path="courses/create" element={<CreateCourse />} />
+              {/* ADDED: Route for the Course Editor */}
+              <Route path="courses/:courseId/edit" element={<EditCourse />} />
+              
               <Route path="assignments" element={<TeacherAssignments />} />
               <Route path="profile" element={<TeacherProfile />} />
             </Route>

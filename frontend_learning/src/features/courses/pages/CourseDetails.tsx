@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { EmptyState } from '../../../components/feedback/EmptyState';
@@ -20,6 +20,7 @@ const LEVEL_LABEL: Record<string, string> = {
 export default function CourseDetails() {
   const { courseId = '' } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAuthenticated, role } = useAuth();
 
   const { data: course, loading, error, refetch } = useCourseDetails(courseId);
@@ -27,14 +28,20 @@ export default function CourseDetails() {
   const { data: myEnrolments, refetch: refetchEnrolments } = useMyEnrolments();
   const { enrol, loading: enrolling, error: enrolError } = useEnrol();
 
+  // FIXED: If is_active is missing, assume it is true.
   const enrolled =
-    !!myEnrolments?.some((e) => e.course_id === courseId && e.is_active);
+    !!myEnrolments?.some((e) => e.course_id === courseId && e.is_active !== false);
 
   if (loading) return <LoadingState message="Loading course…" />;
   if (error) return <ErrorState message={error} onRetry={refetch} />;
   if (!course) return <EmptyState title="Course not found" />;
 
   const isFree = course.price_xaf === 0;
+
+  // Keep the user inside the student dashboard if they are a student
+  const backLink = role === 'student' && location.pathname.startsWith('/student') 
+    ? '/student/courses' 
+    : '/courses';
 
   async function handleEnrol() {
     if (!course) return;
@@ -84,7 +91,7 @@ export default function CourseDetails() {
 
   return (
     <div className="space-y-6">
-      <Link to="/courses" className="text-sm font-medium text-accent hover:underline">
+      <Link to={backLink} className="text-sm font-medium text-accent hover:underline">
         ← Back to courses
       </Link>
 

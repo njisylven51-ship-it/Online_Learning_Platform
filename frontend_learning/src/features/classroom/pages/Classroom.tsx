@@ -9,10 +9,12 @@ import { LessonContent } from '../components/LessonContent';
 import { LessonNavigation } from '../components/LessonNavigation';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
+import { useAuth } from '../../../contexts/AuthContext';
 
 export default function Classroom() {
   const { courseId = '' } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  const { role } = useAuth();
 
   const { data: enrollments, loading: enrolLoading } = useMyEnrolments();
   const { data: course } = useCourseDetails(courseId);
@@ -36,7 +38,8 @@ export default function Classroom() {
   // Redirect if not enrolled
   useEffect(() => {
     if (!enrolLoading && enrollments) {
-      const isEnrolled = enrollments.some((e) => e.course_id === courseId && e.is_active);
+      // FIXED: If is_active is missing, assume it is true. Only kick them out if it is explicitly false.
+      const isEnrolled = enrollments.some((e) => e.course_id === courseId && e.is_active !== false);
       if (!isEnrolled) {
         navigate(`/courses/${courseId}`, { replace: true });
       }
@@ -55,6 +58,9 @@ export default function Classroom() {
   if (enrolLoading || contentLoading) return <LoadingState message="Loading classroom…" />;
   if (contentError) return <ErrorState message={contentError} onRetry={refetch} />;
   if (!flatLessons.length) return <ErrorState message="This course has no lessons yet." />;
+
+  // Determine the back link based on the user's role
+  const backLink = role === 'student' ? '/student/courses' : '/courses';
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col md:flex-row bg-white">
@@ -76,8 +82,8 @@ export default function Classroom() {
       {/* Sidebar Desktop */}
       <div className="hidden w-80 shrink-0 border-r border-line md:block">
         <div className="border-b border-line p-4">
-          <Link to={`/courses/${courseId}`} className="text-xs font-medium text-accent hover:underline">
-            ← Back to course
+          <Link to={backLink} className="text-xs font-medium text-accent hover:underline">
+            ← Back to courses
           </Link>
           <h2 className="mt-2 text-lg font-bold text-forest">{course?.title}</h2>
         </div>

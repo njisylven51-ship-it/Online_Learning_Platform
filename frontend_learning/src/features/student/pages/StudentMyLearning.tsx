@@ -17,7 +17,7 @@ export default function StudentMyLearning() {
     <div className="space-y-6">
       <PageHeader
         title="My Learning"
-        subtitle="All the courses you are enrolled in."
+        subtitle="teacherServiceAll the courses you are enrolled in."
         action={
           <Link to="/courses">
             <Button variant="secondary" size="sm">Browse More Courses</Button>

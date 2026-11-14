@@ -29,10 +29,11 @@ export function PaymentHistory({ payments }: PaymentHistoryProps) {
           {payments.map((p) => (
             <tr key={p.id} className="hover:bg-forest-tint/50">
               <td className="px-4 py-3 font-medium text-forest">
-                {p.course_title ?? '—'}
+                {/* Fallback to the truncated course ID if the backend doesn't send the title */}
+                {p.course_title || `Course ID: ${(p.course_id || '').slice(0, 8)}...`}
               </td>
-              <td className="px-4 py-3">{formatCurrency(p.amount_xaf, p.currency)}</td>
-              <td className="px-4 py-3 capitalize">{p.provider}</td>
+              <td className="px-4 py-3">{formatCurrency(p.amount_xaf, p.currency || 'XAF')}</td>
+              <td className="px-4 py-3 capitalize">{p.provider || 'Unknown'}</td>
               <td className="px-4 py-3 text-ink-muted">{formatDate(p.created_at)}</td>
               <td className="px-4 py-3">
                 <Badge
@@ -40,7 +41,7 @@ export function PaymentHistory({ payments }: PaymentHistoryProps) {
                     p.status === 'succeeded' ? 'success' : p.status === 'failed' ? 'danger' : 'warning'
                   }
                 >
-                  {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                  {p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : 'Pending'}
                 </Badge>
               </td>
             </tr>

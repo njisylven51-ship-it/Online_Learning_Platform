@@ -19,30 +19,43 @@ export function useStudentDashboard() {
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch enrolments
       const enrolments = await enrolmentService.getMyEnrolments();
-      const active = enrolments.filter((e) => e.is_active);
+      
+      // 🚨 DEBUGGING: Look at your browser console for this log!
+      console.log('Enrolments received from backend:', enrolments);
 
-      // 2. Fetch course details and progress concurrently
+      // FIXED: If is_active is missing, assume it is active.
+      const active = enrolments.filter((e: any) => e.is_active !== false);
+
       const combined = await Promise.all(
         active.map(async (enrolment) => {
+          let course = null;
+          let progress = null;
+
           try {
-            const [course, progress] = await Promise.all([
-              courseService.getCourse(enrolment.course_id),
-              classroomService.getCourseProgress(enrolment.course_id),
-            ]);
-            return { enrolment, course, progress };
-          } catch {
-            // If a course was deleted or unpublished, skip it gracefully
+            course = await courseService.getCourse(enrolment.course_id);
+          } catch (err) {
+            console.error(`Failed to load course details for ${enrolment.course_id}`, err);
             return null;
           }
+
+          try {
+            progress = await classroomService.getCourseProgress(enrolment.course_id);
+          } catch (err) {
+            progress = {
+              course_id: enrolment.course_id,
+              completed_lessons: 0,
+              total_lessons: 0,
+              percentage: 0,
+            };
+          }
+
+          return { enrolment, course, progress };
         })
       );
 
-      // Filter out nulls (courses that failed to load)
       const validCourses = combined.filter((c): c is EnrolledCourse => c !== null);
 
-      // 3. Calculate stats
       let completed = 0;
       let lessonsCompleted = 0;
       validCourses.forEach((c) => {

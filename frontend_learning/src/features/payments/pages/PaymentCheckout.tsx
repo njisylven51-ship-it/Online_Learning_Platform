@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useCourseDetails } from '../../courses/hooks/useCourseDetails';
-import { useMyEnrolments } from '../../enrolments/hooks/useMyEnrolments';
+import { useMyEnrolments } from '../../enrolments/hooks/useMyEnrolments'; // <-- Ensure this is imported
 import { useCreatePayment } from '../hooks/useCreatePayment';
 import { useVerifyPayment } from '../hooks/useVerifyPayment';
 import { SimulatorBanner } from '../components/SimulatorBanner';
@@ -9,6 +9,8 @@ import { PaymentForm } from '../components/PaymentForm';
 import { PaymentStatusDisplay } from '../components/PaymentStatus';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
+import { EmptyState } from '../../../components/feedback/EmptyState';
+import { Button } from '../../../components/ui/Button';
 import { formatCurrency } from '../../../utils/formatCurrency';
 import type { Payment, PaymentProvider, PaymentStatus } from '../types';
 
@@ -17,7 +19,9 @@ export default function PaymentCheckout() {
   const navigate = useNavigate();
   
   const { data: course, loading: courseLoading, error: courseError } = useCourseDetails(courseId);
-  const { refetch: refetchEnrolments } = useMyEnrolments();
+  
+  // Get the refetch function for enrolments
+  const { data: myEnrolments, loading: enrolmentsLoading, refetch: refetchEnrolments } = useMyEnrolments();
   
   const { create, loading: creating, error: createError } = useCreatePayment();
   const { verify, loading: verifying, error: verifyError } = useVerifyPayment();
@@ -26,15 +30,38 @@ export default function PaymentCheckout() {
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (courseLoading) return <LoadingState message="Loading course details…" />;
+  const alreadyEnrolled = myEnrolments?.some((e) => e.course_id === courseId && e.is_active);
+
+  useEffect(() => {
+    if (alreadyEnrolled && !status) {
+      navigate(`/student/classroom/${courseId}`, { replace: true });
+    }
+  }, [alreadyEnrolled, courseId, navigate, status]);
+
+  if (courseLoading || enrolmentsLoading) return <LoadingState message="Checking access…" />;
   if (courseError) return <ErrorState message={courseError} />;
   if (!course) return <ErrorState message="Course not found." />;
+
+  if (alreadyEnrolled && !status) {
+    return (
+      <div className="mx-auto max-w-lg py-12">
+        <EmptyState 
+          title="Already Enrolled"
+          description="You already have access to this course."
+          action={
+            <Link to={`/student/classroom/${courseId}`}>
+              <Button>Go to Classroom</Button>
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
 
   const handleSubmit = async (provider: PaymentProvider, phone: string) => {
     setError(null);
     setStatus('pending');
     try {
-      // 1. Create payment
       const created = await create({
         course_id: course.id,
         provider,
@@ -42,12 +69,12 @@ export default function PaymentCheckout() {
       });
       setPayment(created);
 
-      // 2. Verify payment (using the ID from creation)
       const verified = await verify(created.id);
       setStatus(verified.status);
       
       if (verified.status === 'succeeded') {
-        await refetchEnrolments();
+        // 🚨 CRITICAL FIX: Tell the frontend to re-fetch enrolments from the backend
+        await refetchEnrolments(); 
       }
     } catch (e) {
       setStatus(null);

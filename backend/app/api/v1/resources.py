@@ -51,7 +51,7 @@ def confirm(payload: ResourceConfirmation, user: CurrentUser, session: SessionDe
         delete_resource(canonical_public_id, kind)
         raise HTTPException(status_code=413, detail="Resource exceeds the configured size limit")
     fmt = str(asset.get("format", "")).lower()
-    expected_formats = {"image": {"jpg", "jpeg", "png", "webp"}, "document": {"pdf"}}
+    expected_formats = {"image": {"jpg", "jpeg", "png", "webp"}, "document": {"pdf", ""}}
     if fmt not in expected_formats[payload.resource_type]:
         delete_resource(canonical_public_id, kind)
         raise HTTPException(status_code=415, detail="Uploaded resource type is not allowed")

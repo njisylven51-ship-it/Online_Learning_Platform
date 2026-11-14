@@ -8,15 +8,45 @@ import { ErrorState } from '../../../components/feedback/ErrorState';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { Button } from '../../../components/ui/Button';
 import { formatDate } from '../../../utils/formatDate';
+import { session } from '../../../services/storage/session';
+import { env } from '../../../config/env';
 
 export default function CertificatesPage() {
   const { courses } = useStudentDashboard();
   const { data: certs, loading, error, generate, generating } = useCertificates();
 
+  // --- NEW: Blob download logic ---
+  async function handleDownload(certId: string, courseTitle: string) {
+    try {
+      const token = session.getToken();
+      const res = await fetch(`${env.apiBaseUrl}/certificates/${certId}/pdf`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!res.ok) throw new Error('Failed to download');
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Certificate-${courseTitle.replace(/\s+/g, '-')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Could not download certificate. Please try again.');
+    }
+  }
+  // ---------------------------------
+
   if (loading) return <LoadingState message="Loading certificates…" />;
   if (error) return <ErrorState message={error} />;
 
-  // Find courses that are 100% complete but don't have a cert yet
   const eligibleCourses = courses?.filter(c => 
     c.progress?.percentage === 100 && 
     !certs?.some(cert => cert.course_id === c.course.id)
@@ -78,14 +108,13 @@ export default function CertificatesPage() {
                     <h3 className="font-bold text-forest">{cert.course_title ?? 'Course Certificate'}</h3>
                     <p className="mt-1 text-xs text-ink-muted">Issued on {formatDate(cert.issued_at)}</p>
                     
-                    <a 
-                      href={certificateService.getPdfUrl(cert.id)} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-line bg-white py-2 text-sm font-medium text-forest hover:bg-forest-tint"
+                    {/* UPDATED BUTTON TO USE FETCH BLOB */}
+                    <button 
+                      onClick={() => handleDownload(cert.id, cert.course_title ?? 'Course')}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-white py-2 text-sm font-medium text-forest hover:bg-forest-tint"
                     >
                       Download PDF ↗
-                    </a>
+                    </button>
                   </div>
                 ))}
               </div>
