@@ -3,6 +3,7 @@ import type { Certificate } from '../types';
 
 export const certificateService = {
   getMyCertificates(): Promise<Certificate[]> {
+    // This now hits the new backend route
     return client.get<Certificate[]>('/certificates/me');
   },
   
@@ -11,7 +12,7 @@ export const certificateService = {
   },
   
   getPdfUrl(certificateId: string): string {
-    // We return the URL string so the browser can open it in a new tab
+    // The frontend uses a Blob fetch for this, so it just needs the base URL
     return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'}/certificates/${certificateId}/pdf`;
   }
 };

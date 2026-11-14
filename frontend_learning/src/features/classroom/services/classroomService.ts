@@ -39,10 +39,22 @@ export const classroomService = {
     });
   },
 
-  updateVideoProgress(videoId: string, positionSeconds: number): Promise<void> {
-    return client.put<void>(`/videos/${videoId}/progress`, {
+  // FIXED: Now accepts the browser-calculated duration as a fallback
+  updateVideoProgress(
+    videoId: string, 
+    positionSeconds: number, 
+    durationSeconds?: number
+  ): Promise<void> {
+    const payload: any = {
       position_seconds: positionSeconds,
-    });
+    };
+    
+    // Only attach duration if the browser provided a valid number
+    if (durationSeconds !== undefined && !isNaN(durationSeconds) && durationSeconds > 0) {
+      payload.duration_seconds = durationSeconds;
+    }
+
+    return client.put<void>(`/videos/${videoId}/progress`, payload);
   },
 
   getCourseProgress(courseId: string): Promise<CourseProgress> {

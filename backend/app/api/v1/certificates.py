@@ -24,6 +24,33 @@ def issue(course_id: UUID, user: CurrentUser, session: SessionDep) -> Certificat
     return certificate
 
 
+@router.get("/me")
+def get_my_certificates(user: CurrentUser, session: SessionDep):
+    if user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view certificates")
+    
+    # Join Certificate with Course to get the course title for the frontend
+    statement = select(Certificate, Course).join(
+        Course, Certificate.course_id == Course.id
+    ).where(Certificate.student_id == user.id)
+    
+    results = session.exec(statement).all()
+    
+    return [
+        {
+            "id": str(cert.id),
+            "student_id": str(cert.student_id),
+            "course_id": str(cert.course_id),
+            "certificate_code": cert.certificate_code,
+            "issued_at": cert.issued_at.isoformat() if cert.issued_at else None,
+            "revoked": cert.revoked,
+            "pdf_url": cert.pdf_url,
+            "course_title": course.title,
+        }
+        for cert, course in results
+    ]
+
+
 @router.get("/verify/{code}")
 def verify(code: str, session: SessionDep) -> dict[str, object]:
     certificate = session.exec(select(Certificate).where(Certificate.certificate_code == code)).first()

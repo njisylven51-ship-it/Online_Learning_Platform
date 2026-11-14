@@ -53,7 +53,8 @@ export default function Classroom() {
   // Mobile drawer state
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const { lesson, resources, loading: lessonLoading, error: lessonError } = useLesson(activeLessonId);
+  // FIXED: Extract refetch as refetchLesson so we can pass it down to refresh signed URLs
+  const { lesson, resources, loading: lessonLoading, error: lessonError, refetch: refetchLesson } = useLesson(activeLessonId);
 
   if (enrolLoading || contentLoading) return <LoadingState message="Loading classroom…" />;
   if (contentError) return <ErrorState message={contentError} onRetry={refetch} />;
@@ -134,6 +135,7 @@ export default function Classroom() {
                 lesson={lesson}
                 resources={resources}
                 onCompleted={() => refetch()}
+                onRefreshResources={refetchLesson}  // <-- ADDED: Pass refetch to LessonContent
               />
               <LessonNavigation
                 hasPrev={hasPrev}

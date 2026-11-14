@@ -11,15 +11,18 @@ export function useTeacherDashboard() {
     setLoading(true);
     setError(null);
     try {
-      setStats(await teacherService.getDashboardStats());
+      const data = await teacherService.getDashboardStats();
+      setStats(data);
     } catch (e) {
-      setError(e instanceof ApiError ? e.info.message : 'Failed to load stats.');
+      setError(e instanceof ApiError ? e.info.message : 'Failed to load dashboard stats.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void fetch(); }, [fetch]);
+  useEffect(() => {
+    void fetch();
+  }, [fetch]);
 
   return { stats, loading, error, refetch: fetch };
 }

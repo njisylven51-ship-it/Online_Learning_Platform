@@ -93,8 +93,7 @@ export const courseService = {
     return client.post<CloudinarySignature>(`/resources/upload-signature?kind=${kind}`);
   },
 
-  confirmResource(payload: ResourceConfirmPayload): Promise<any> {
-    // Direct fetch to guarantee the Content-Type header is application/json
+    confirmResource(payload: ResourceConfirmPayload): Promise<any> {
     const token = session.getToken();
     return fetch(`${env.apiBaseUrl}/resources/confirm`, {
       method: 'POST',
@@ -106,10 +105,25 @@ export const courseService = {
     }).then(async (res) => {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        console.error('Confirm resource error:', errorData);
-        throw new Error('Failed to confirm resource');
+        console.error('[confirmResource] failed:', res.status, errorData);
+        // Surface the actual backend message
+        throw new Error(errorData.detail || `Failed to confirm resource (${res.status})`);
       }
       return res.json();
     });
   },
+    // Add this to trigger the backend to re-check Cloudinary for video duration
+  syncVideo(videoId: string): Promise<any> {
+    return client.post<any>(`/videos/${videoId}/retry`);
+  },
+  // Add these inside the courseService object:
+
+  retryVideoProcessing(videoId: string): Promise<any> {
+    return client.post<any>(`/videos/${videoId}/retry`);
+  },
+
+  getLessonVideos(lessonId: string): Promise<any[]> {
+    return client.get<any[]>(`/videos/lessons/${lessonId}`);
+  },
+  
 };

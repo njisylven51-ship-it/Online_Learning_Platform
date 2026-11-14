@@ -31,7 +31,22 @@ def confirm_upload(session: Session, lesson_id: UUID, user: User, public_id: str
     if size > settings.cloudinary_max_video_size:
         delete_resource(canonical_public_id, "video")
         raise HTTPException(status_code=413, detail="Video exceeds the configured size limit")
-    video = Video(lesson_id=lesson_id, uploaded_by=user.id, public_id=canonical_public_id, secure_url=asset["secure_url"], format=fmt, size_bytes=size, duration_seconds=float(asset.get("duration", 0)), status="ready")
+
+    # If Cloudinary hasn't finished processing, mark as "processing" and let the
+    # frontend polling loop (or the browser fallback below) settle it.
+    duration = float(asset.get("duration", 0))
+    status = "ready" if duration > 0 else "processing"
+
+    video = Video(
+        lesson_id=lesson_id,
+        uploaded_by=user.id,
+        public_id=canonical_public_id,
+        secure_url=asset["secure_url"],
+        format=fmt,
+        size_bytes=size,
+        duration_seconds=duration,
+        status=status,
+    )
     session.add(video)
     session.commit()
     session.refresh(video)
@@ -46,32 +61,69 @@ def playback(session: Session, video_id: UUID, user: User) -> Video:
     return video
 
 
-def update_video_progress(session: Session, video: Video, user: User, position: int, duration: int) -> VideoProgress:
+def update_video_progress(
+    session: Session,
+    video: Video,
+    user: User,
+    position: int,
+    frontend_duration: float | None = None,
+) -> VideoProgress:
     if user.role != "student":
         raise HTTPException(status_code=403, detail="Only students can update playback progress")
-    # The authoritative duration comes from the Cloudinary asset metadata, never the client.
+
     duration = int(video.duration_seconds)
+
+    # --- Browser fallback ---
+    # If Cloudinary never gave us a duration, trust the HTML5 <video> element.
+    # This permanently heals the video record so future requests use the DB value.
+    if duration <= 0 and frontend_duration and frontend_duration > 0:
+        video.duration_seconds = frontend_duration
+        video.status = "ready"
+        session.add(video)
+        session.commit()
+        session.refresh(video)
+        duration = int(video.duration_seconds)
+    # ------------------------
+
     if duration <= 0:
         raise HTTPException(status_code=409, detail="Video duration is not available yet")
     if position > duration + 5:
         raise HTTPException(status_code=422, detail="Playback position exceeds video duration")
+
     now = datetime.now(timezone.utc)
-    progress = session.exec(select(VideoProgress).where(VideoProgress.video_id == video.id, VideoProgress.student_id == user.id)).first()
+    progress = session.exec(
+        select(VideoProgress).where(
+            VideoProgress.video_id == video.id,
+            VideoProgress.student_id == user.id,
+        )
+    ).first()
+
     if progress is None:
         initial_position = min(position, duration)
-        progress = VideoProgress(video_id=video.id, student_id=user.id, position_seconds=initial_position, furthest_position_seconds=initial_position, updated_at=now)
+        progress = VideoProgress(
+            video_id=video.id,
+            student_id=user.id,
+            position_seconds=initial_position,
+            furthest_position_seconds=initial_position,
+            updated_at=now,
+        )
+        progress.video = video  # prevent SQLAlchemy from nullifying video_id
     else:
+        progress.video = video  # prevent SQLAlchemy from nullifying video_id
+
         previous_update = progress.updated_at
         if previous_update.tzinfo is None:
             previous_update = previous_update.replace(tzinfo=timezone.utc)
         elapsed = max(0.0, (now - previous_update).total_seconds())
         bounded_position = min(position, duration)
         forward_delta = max(0, bounded_position - progress.furthest_position_seconds)
-        # Count playback time only when position advances at a plausible real-time rate.
         progress.watched_seconds += int(min(forward_delta, elapsed + 1))
         progress.position_seconds = bounded_position
-        progress.furthest_position_seconds = max(progress.furthest_position_seconds, bounded_position)
+        progress.furthest_position_seconds = max(
+            progress.furthest_position_seconds, bounded_position
+        )
         progress.updated_at = now
+
     progress.completed = progress.watched_seconds >= duration * 0.9
     session.add(progress)
     session.commit()
@@ -86,17 +138,28 @@ def manage_video(session: Session, video_id: UUID, user: User, action: str) -> V
     lesson = session.get(Lesson, video.lesson_id)
     module = session.get(Module, lesson.module_id)
     ensure_course_owner(session, module.course_id, user)
+
     if action == "delete":
         delete_resource(video.public_id, "video")
         video.status = "deleted"
     elif action == "retry":
         asset = get_resource(video.public_id, "video")
-        if int(asset.get("bytes", 0)) > 0 and str(asset.get("format", "")).lower() in {"mp4", "webm", "mov", "m4v"}:
+        duration = float(asset.get("duration", 0))
+        asset_format = str(asset.get("format", "")).lower()
+
+        if (
+            int(asset.get("bytes", 0)) > 0
+            and duration > 0
+            and asset_format in {"mp4", "webm", "mov", "m4v"}
+        ):
             video.status = "ready"
             video.size_bytes = int(asset["bytes"])
-            video.duration_seconds = float(asset.get("duration", video.duration_seconds))
+            video.duration_seconds = duration
         else:
-            raise HTTPException(status_code=409, detail="Video is not ready for playback")
+            # Cloudinary still hasn't returned a duration. Flip to ready anyway
+            # so the frontend can load the player and let the browser supply it.
+            video.status = "ready"
+
     session.add(video)
     session.commit()
     session.refresh(video)

@@ -45,8 +45,11 @@ export function useLessonManager(moduleId: string) {
       if (sig.api_key) formData.append('api_key', sig.api_key);
       if (sig.signature) formData.append('signature', sig.signature);
 
+      // Use upload_url from backend if provided, otherwise fallback to video/upload
+      const uploadUrl = (sig as any).upload_url || `https://api.cloudinary.com/v1_1/${sig.cloud_name}/video/upload`;
+
       Object.keys(sig).forEach(key => {
-        if (!['signature', 'api_key', 'cloud_name', 'resource_type'].includes(key)) {
+        if (!['signature', 'api_key', 'cloud_name', 'resource_type', 'upload_url'].includes(key)) {
           const value = sig[key as keyof typeof sig];
           if (value !== undefined && value !== null) {
             formData.append(key, String(value));
@@ -54,10 +57,10 @@ export function useLessonManager(moduleId: string) {
         }
       });
 
-      const cloudRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${sig.cloud_name}/video/upload`,
-        { method: 'POST', body: formData }
-      );
+      const cloudRes = await fetch(uploadUrl, {
+        method: 'POST', 
+        body: formData 
+      });
       
       if (!cloudRes.ok) {
         const errorData = await cloudRes.json();
@@ -65,9 +68,35 @@ export function useLessonManager(moduleId: string) {
       }
       
       const cloudData = await cloudRes.json();
-      await courseService.confirmVideoUpload(lessonId, cloudData.public_id);
+      
+      // 1. Confirm with backend
+      let videoRecord = await courseService.confirmVideoUpload(lessonId, cloudData.public_id);
+      
+      // 2. Polling Loop
+      let attempts = 0;
+      while (videoRecord.status === 'processing' || videoRecord.duration_seconds === 0) {
+        if (attempts >= 10) { 
+          alert('Video uploaded, but Cloudinary is taking a long time to process. Please check back later.');
+          break;
+        }
+        
+        console.log(`Processing... retry ${attempts + 1}/10`);
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3s
+        
+        try {
+          videoRecord = await courseService.retryVideoProcessing(videoRecord.id);
+        } catch (err) {
+          // Backend returns 409 if still processing; we ignore and let the loop continue
+        }
+        attempts++;
+      }
+
+      if (videoRecord.status === 'ready') {
+        alert('Video uploaded and processed successfully!');
+      }
+
       await fetchLessons();
-      alert('Video uploaded successfully!');
+      
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Video upload failed.');
     } finally {
@@ -80,7 +109,6 @@ export function useLessonManager(moduleId: string) {
     try {
       const sig = await courseService.getResourceSignature('document');
       
-      // Force the file to be named with .pdf extension
       const fileNameWithExt = file.name.toLowerCase().endsWith('.pdf') 
         ? file.name 
         : `${file.name.replace(/\.[^/.]+$/, '')}.pdf`;
@@ -102,7 +130,6 @@ export function useLessonManager(moduleId: string) {
         }
       });
 
-      // Upload to /raw/upload
       const cloudRes = await fetch(
         `https://api.cloudinary.com/v1_1/${sig.cloud_name}/raw/upload`,
         { method: 'POST', body: formData }
@@ -115,20 +142,11 @@ export function useLessonManager(moduleId: string) {
       
       const cloudData = await cloudRes.json();
       
-      // 🚨 CHECK THE BROWSER CONSOLE FOR THIS LOG 🚨
-      console.log('Cloudinary Response:', {
-        public_id: cloudData.public_id,
-        format: cloudData.format, // This MUST be "pdf"
-        resource_type: cloudData.resource_type
-      });
-
-      // Ensure public_id ends in .pdf
       let finalPublicId = cloudData.public_id;
       if (!finalPublicId.toLowerCase().endsWith('.pdf')) {
         finalPublicId += '.pdf';
       }
 
-      // Send "document" to the backend
       await courseService.confirmResource({
         lesson_id: lessonId,
         title: title || file.name,

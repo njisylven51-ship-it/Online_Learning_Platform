@@ -1,4 +1,6 @@
 from uuid import UUID
+from app.schemas.video import VideoRead  # <-- Import VideoRead
+
 
 from pydantic import BaseModel, ConfigDict
 
@@ -13,3 +15,5 @@ class LessonRead(BaseModel):
     duration_seconds: int
     position: int
     is_preview: bool
+    videos: list[VideoRead] = []  # <-- ADD THIS LINE
+

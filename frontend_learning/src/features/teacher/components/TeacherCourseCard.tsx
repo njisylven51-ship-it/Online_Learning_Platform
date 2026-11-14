@@ -10,7 +10,7 @@ export function TeacherCourseCard({ course }: { course: Course }) {
     course.status === 'rejected' ? 'danger' : 'neutral';
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+    <div className="flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition hover:shadow-md">
       <div className="flex flex-1 flex-col p-5">
         <div className="mb-3 flex items-center justify-between">
           <Badge tone={statusTone}>
@@ -25,7 +25,7 @@ export function TeacherCourseCard({ course }: { course: Course }) {
           {course.description}
         </p>
       </div>
-      <div className="border-t border-line bg-forest-tint p-3">
+      <div className="border-t border-line bg-forest-tint/50 p-3">
         <Link
           to={`/teacher/courses/${course.id}/edit`}
           className="flex w-full items-center justify-center rounded-lg border border-line bg-white py-2 text-sm font-medium text-forest transition hover:bg-forest hover:text-white"

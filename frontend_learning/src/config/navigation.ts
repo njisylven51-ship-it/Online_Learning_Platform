@@ -8,7 +8,7 @@ export interface NavItem {
 
 export const STUDENT_NAV: NavItem[] = [
   { to: '/student/dashboard', label: 'Dashboard', icon: 'grid', end: true },
-  { to: '/student/courses', label: 'Browse Courses', icon: 'book' }, // <-- Updated
+  { to: '/student/courses', label: 'Browse Courses', icon: 'book' },
   { to: '/student/my-learning', label: 'My Learning', icon: 'layers' },
   { to: '/student/progress', label: 'Progress', icon: 'chart' },
   { to: '/student/certificates', label: 'Certificates', icon: 'award' },
@@ -18,7 +18,8 @@ export const STUDENT_NAV: NavItem[] = [
 
 export const TEACHER_NAV: NavItem[] = [
   { to: '/teacher/dashboard', label: 'Dashboard', icon: 'grid', end: true },
-  { to: '/teacher/courses', label: 'My Courses', icon: 'book' },
+  // FIXED: Added end: true so it doesn't highlight when on /teacher/courses/create
+  { to: '/teacher/courses', label: 'My Courses', icon: 'book', end: true }, 
   { to: '/teacher/courses/create', label: 'Create Course', icon: 'plus' },
   { to: '/teacher/assignments', label: 'Assignments', icon: 'clipboard' },
   { to: '/teacher/profile', label: 'Profile', icon: 'user' },
@@ -35,23 +36,23 @@ export const ADMIN_NAV: NavItem[] = [
 
 // Bottom nav — exactly 5 items per spec.
 export const STUDENT_MOBILE_NAV: NavItem[] = [
-  { to: '/student/dashboard', label: 'Home', icon: 'home' },
-  { to: '/student/courses', label: 'Learning', icon: 'book' }, // Changed to Learning
-  { to: '/student/my-learning', label: 'Library', icon: 'layers' }, // Changed to Library
-  { to: '/student/progress', label: 'Activity', icon: 'chart' }, // Changed to Activity
+  { to: '/student/dashboard', label: 'Home', icon: 'home', end: true },
+  { to: '/student/courses', label: 'Courses', icon: 'book' },
+  { to: '/student/my-learning', label: 'Learning', icon: 'layers' },
+  { to: '/student/progress', label: 'Progress', icon: 'chart' },
   { to: '/student/profile', label: 'Profile', icon: 'user' },
 ];
 
 export const TEACHER_MOBILE_NAV: NavItem[] = [
-  { to: '/teacher/dashboard', label: 'Home', icon: 'home' },
-  { to: '/teacher/courses', label: 'Courses', icon: 'book' },
+  { to: '/teacher/dashboard', label: 'Home', icon: 'home', end: true },
+  { to: '/teacher/courses', label: 'Courses', icon: 'book', end: true }, // <-- Fixed here too
   { to: '/teacher/courses/create', label: 'Create', icon: 'plus', primary: true },
   { to: '/teacher/assignments', label: 'Tasks', icon: 'clipboard' },
   { to: '/teacher/profile', label: 'Profile', icon: 'user' },
 ];
 
 export const ADMIN_MOBILE_NAV: NavItem[] = [
-  { to: '/admin/dashboard', label: 'Home', icon: 'home' },
+  { to: '/admin/dashboard', label: 'Home', icon: 'home', end: true },
   { to: '/admin/users', label: 'Users', icon: 'users' },
   { to: '/admin/courses', label: 'Courses', icon: 'book' },
   { to: '/admin/more', label: 'More', icon: 'more' },

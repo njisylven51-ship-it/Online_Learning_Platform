@@ -44,7 +44,15 @@ def create_upload_signature(subfolder: str, resource_type: str) -> dict[str, Any
     else:
         params["folder"] = destination
     signature = cloudinary.utils.api_sign_request(params, settings.cloudinary_api_secret)
-    return {**params, "resource_type": resource_type, "signature": signature, "api_key": settings.cloudinary_api_key, "cloud_name": settings.cloudinary_cloud_name}
+    
+    return {
+        **params, 
+        "resource_type": resource_type, 
+        "signature": signature, 
+        "api_key": settings.cloudinary_api_key, 
+        "cloud_name": settings.cloudinary_cloud_name,
+        "upload_url": f"https://api.cloudinary.com/v1_1/{settings.cloudinary_cloud_name}/{resource_type}/upload" # Added for clarity
+    }
 
 
 def get_resource(public_id: str, resource_type: str) -> dict[str, Any]:

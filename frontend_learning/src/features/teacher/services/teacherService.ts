@@ -1,5 +1,4 @@
 import { client } from '../../../services/api/client';
-import { ApiError } from '../../../services/api/client';
 
 export interface TeacherStats {
   total_courses: number;
@@ -27,14 +26,7 @@ export const teacherService = {
   },
 
   getSubmissions(): Promise<StudentSubmission[]> {
-    return client.get<StudentSubmission[]>('/assignments/submissions/mine')
-      .catch((e) => {
-        if (e instanceof ApiError && e.info.status === 404) {
-          console.warn('Backend missing /assignments/submissions/mine endpoint. Returning empty list.');
-          return [];
-        }
-        throw e;
-      });
+    return client.get<StudentSubmission[]>('/assignments/submissions/mine');
   },
 
   gradeSubmission(submissionId: string, score: number, feedback: string): Promise<any> {
@@ -42,5 +34,5 @@ export const teacherService = {
       score,
       feedback,
     });
-  }
+  },
 };

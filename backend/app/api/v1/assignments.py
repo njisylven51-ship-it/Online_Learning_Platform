@@ -3,6 +3,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlmodel import select
+from app.models.course import Course
+from app.models.assignment import Assignment, AssignmentSubmission
+from app.models.user import User
 
 from app.core.dependencies import CurrentUser, SessionDep
 from app.core.permissions import require_approved_teacher_or_admin, require_roles
@@ -73,3 +76,42 @@ def grade_submission(submission_id: UUID, payload: AssignmentGrade, user: Curren
 @router.get("/me/submissions", dependencies=[Depends(require_roles("student"))])
 def my_submissions(user: CurrentUser, session: SessionDep) -> list[AssignmentSubmission]:
     return list(session.exec(select(AssignmentSubmission).where(AssignmentSubmission.student_id == user.id).order_by(AssignmentSubmission.submitted_at.desc())).all())
+
+@router.get("/submissions/mine")
+def get_teacher_submissions(user: CurrentUser, session: SessionDep):
+    if user.role not in ["teacher", "administrator"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    from sqlmodel import select
+    
+    # Join Submission -> Assignment -> User -> Lesson -> Module -> Course
+    statement = select(AssignmentSubmission, Assignment, User).join(
+        Assignment, AssignmentSubmission.assignment_id == Assignment.id
+    ).join(
+        User, AssignmentSubmission.student_id == User.id
+    ).join(
+        Lesson, Assignment.lesson_id == Lesson.id
+    ).join(
+        Module, Lesson.module_id == Module.id
+    ).join(
+        Course, Module.course_id == Course.id
+    ).where(Course.instructor_id == user.id)
+    
+    results = session.exec(statement).all()
+    
+    return [
+        {
+            "id": str(sub.id),
+            "assignment_id": str(sub.assignment_id),
+            "student_id": str(sub.student_id),
+            "text": sub.text_submission,  # <-- FIXED: Maps to the correct DB field
+            "file_public_id": sub.file_public_id,
+            "score": sub.score,
+            "feedback": sub.feedback,
+            "status": sub.status,
+            "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
+            "assignment_title": assignment.title,
+            "student_name": student.full_name,
+        }
+        for sub, assignment, student in results
+    ]
