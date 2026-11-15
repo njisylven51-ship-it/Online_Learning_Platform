@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import select
+from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import CurrentUser, SessionDep
 from app.core.permissions import require_roles
@@ -13,6 +14,8 @@ from app.models.course import Course
 from app.models.enrolment import Enrolment
 from app.models.payment import Payment
 from app.schemas.user import UserRead
+from app.schemas.course import CourseRead
+from app.services.course_service import thumbnail_url_for
 
 router = APIRouter(prefix="/admin", tags=["administration"], dependencies=[Depends(require_roles("administrator"))])
 
@@ -33,12 +36,13 @@ def dashboard(session: SessionDep) -> dict[str, int]:
     return {"users": len(session.exec(select(User)).all()), "courses_pending_review": len(session.exec(select(Course).where(Course.status == "pending_review")).all()), "active_enrolments": len(session.exec(select(Enrolment).where(Enrolment.status == "active")).all()), "payments_pending": len(session.exec(select(Payment).where(Payment.status == "pending")).all())}
 
 
-@router.get("/courses")
-def courses(session: SessionDep, status_filter: str | None = None, limit: int = 50, offset: int = 0) -> list[Course]:
-    statement = select(Course)
+@router.get("/courses", response_model=list[CourseRead])
+def courses(session: SessionDep, status_filter: str | None = None, limit: int = 50, offset: int = 0) -> list[CourseRead]:
+    statement = select(Course).options(selectinload(Course.thumbnail))
     if status_filter:
         statement = statement.where(Course.status == status_filter)
-    return list(session.exec(statement.order_by(Course.created_at.desc()).offset(max(offset, 0)).limit(min(max(limit, 1), 100))).all())
+    items = session.exec(statement.order_by(Course.created_at.desc()).offset(max(offset, 0)).limit(min(max(limit, 1), 100))).all()
+    return [CourseRead.model_validate(course).model_copy(update={"thumbnail_url": thumbnail_url_for(course)}) for course in items]
 
 
 @router.patch("/users/{user_id}/status")

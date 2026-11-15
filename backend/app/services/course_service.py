@@ -8,6 +8,10 @@ from app.models.lesson import Lesson
 from app.models.module import Module
 from app.models.user import User
 from app.models.instructor import Instructor
+from app.models.course_thumbnail import CourseThumbnail
+from app.core.config import settings
+from app.integrations.cloudinary import delete_resource, get_resource, signed_delivery_url
+from app.services.cloudinary_service import UPLOAD_PURPOSES, verify_asset_location
 
 
 def get_course(session: Session, course_id: UUID) -> Course:
@@ -82,3 +86,66 @@ def update_course(session: Session, course: Course, updates: dict[str, object]) 
     session.commit()
     session.refresh(course)
     return course
+
+
+def confirm_course_thumbnail(session: Session, course: Course, public_id: str) -> CourseThumbnail:
+    asset = get_resource(public_id, "image")
+    canonical_public_id = str(asset.get("public_id", public_id))
+    if asset.get("resource_type") != "image":
+        raise HTTPException(status_code=415, detail="Course thumbnail must be an image")
+
+    purpose_subfolder, _ = UPLOAD_PURPOSES["course_thumbnail"]
+    if settings.cloudinary_folder_mode.lower() == "dynamic":
+        expected_base = f"asset-ids/{purpose_subfolder}/"
+    else:
+        expected_base = f"{settings.cloudinary_upload_folder.strip('/')}/{purpose_subfolder}/"
+    if not canonical_public_id.startswith(expected_base):
+        raise HTTPException(status_code=403, detail="Uploaded asset does not belong to the course thumbnail purpose")
+    owner_and_asset = canonical_public_id[len(expected_base):].split("/", 1)
+    if len(owner_and_asset) != 2 or not all(owner_and_asset):
+        raise HTTPException(status_code=403, detail="Uploaded asset is outside its assigned course thumbnail folder")
+    uploader_id = owner_and_asset[0]
+    verify_asset_location("course_thumbnail", uploader_id, canonical_public_id, asset)
+
+    image_format = str(asset.get("format", "")).lower()
+    if image_format not in {"jpg", "jpeg", "png", "webp"}:
+        raise HTTPException(status_code=415, detail="Course thumbnail format is not allowed")
+    size_bytes = int(asset.get("bytes", 0))
+    if size_bytes <= 0 or size_bytes > settings.cloudinary_max_image_size:
+        raise HTTPException(status_code=413, detail="Course thumbnail exceeds the configured size limit")
+
+    thumbnail = session.exec(select(CourseThumbnail).where(CourseThumbnail.course_id == course.id)).first()
+    if thumbnail:
+        if thumbnail.public_id != canonical_public_id:
+            delete_resource(thumbnail.public_id, "image")
+        thumbnail.public_id = canonical_public_id
+        thumbnail.format = image_format
+        thumbnail.bytes = size_bytes
+        thumbnail.status = "ready"
+    else:
+        thumbnail = CourseThumbnail(
+            course_id=course.id,
+            public_id=canonical_public_id,
+            format=image_format,
+            bytes=size_bytes,
+        )
+    course.thumbnail = thumbnail
+    session.add(thumbnail)
+    session.commit()
+    session.refresh(thumbnail)
+    return thumbnail
+
+
+def remove_course_thumbnail(session: Session, course: Course) -> None:
+    thumbnail = session.exec(select(CourseThumbnail).where(CourseThumbnail.course_id == course.id)).first()
+    if thumbnail:
+        delete_resource(thumbnail.public_id, "image")
+        session.delete(thumbnail)
+        session.commit()
+
+
+def thumbnail_url_for(course: Course) -> str | None:
+    thumbnail = course.thumbnail
+    if not thumbnail:
+        return None
+    return signed_delivery_url(thumbnail.public_id, thumbnail.format, "image", expires_in_seconds=300)

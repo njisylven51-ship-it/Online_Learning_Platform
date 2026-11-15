@@ -24,3 +24,4 @@ class Course(SQLModel, table=True):
     enrolments: list["Enrolment"] = Relationship(back_populates="course")
     payments: list["Payment"] = Relationship(back_populates="course")
     certificates: list["Certificate"] = Relationship(back_populates="course")
+    thumbnail: Optional["CourseThumbnail"] = Relationship(back_populates="course")

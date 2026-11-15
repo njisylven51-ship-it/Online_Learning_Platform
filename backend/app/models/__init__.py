@@ -15,5 +15,6 @@ from app.models.progress import Progress
 from app.models.certificate import Certificate
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
+from app.models.course_thumbnail import CourseThumbnail
 
 __all__ = ["User", "Instructor", "Category", "Course", "Module", "Lesson", "Resource", "Video", "VideoProgress", "Quiz", "Question", "QuizAttempt", "Assignment", "AssignmentSubmission", "Enrolment", "Payment", "Progress", "Certificate", "Notification", "AuditLog"]

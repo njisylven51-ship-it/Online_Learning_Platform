@@ -1,9 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import BaseModel
 from sqlmodel import select
+from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import CurrentUser, SessionDep
+from app.core.dependencies import bearer_scheme, get_current_user
 from app.core.permissions import require_approved_teacher_or_admin, require_roles
 from app.models.course import Course
 from app.models.category import Category
@@ -11,9 +15,21 @@ from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.schemas.course import CourseCreate, CourseRead
-from app.services.course_service import create_course, ensure_course_owner, update_course
+from app.services.cloudinary_service import upload_signature
+from app.services.course_service import (
+    confirm_course_thumbnail,
+    create_course,
+    ensure_course_owner,
+    remove_course_thumbnail,
+    thumbnail_url_for,
+    update_course,
+)
 
 router = APIRouter(prefix="/courses", tags=["courses"])
+
+
+class CourseThumbnailConfirm(BaseModel):
+    public_id: str
 
 
 @router.get("/categories")
@@ -21,32 +37,91 @@ def categories(session: SessionDep) -> list[Category]:
     return list(session.exec(select(Category).where(Category.is_active == True).order_by(Category.name)).all())
 
 
+@router.post("/upload-signature", dependencies=[Depends(require_approved_teacher_or_admin)])
+def thumbnail_upload_signature(user: CurrentUser) -> dict[str, object]:
+    return upload_signature("course_thumbnail", str(user.id))
+
+
+@router.put("/{course_id}/thumbnail")
+def set_course_thumbnail(
+    course_id: UUID,
+    payload: CourseThumbnailConfirm,
+    user: CurrentUser,
+    session: SessionDep,
+) -> dict[str, str | None]:
+    course = ensure_course_owner(session, course_id, user)
+    confirm_course_thumbnail(session, course, payload.public_id)
+    return {"thumbnail_url": thumbnail_url_for(course)}
+
+
+@router.delete("/{course_id}/thumbnail", status_code=status.HTTP_204_NO_CONTENT)
+def delete_course_thumbnail(course_id: UUID, user: CurrentUser, session: SessionDep) -> Response:
+    course = ensure_course_owner(session, course_id, user)
+    remove_course_thumbnail(session, course)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{course_id}/thumbnail")
+def get_course_thumbnail(
+    course_id: UUID,
+    session: SessionDep,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict[str, str | None]:
+    course = session.exec(
+        select(Course)
+        .where(Course.id == course_id)
+        .options(selectinload(Course.thumbnail))
+    ).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if course.status != "published":
+        if credentials is None:
+            raise HTTPException(status_code=404, detail="Course not found")
+        user = get_current_user(credentials, session)
+        try:
+            ensure_course_owner(session, course_id, user)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_403_FORBIDDEN:
+                raise HTTPException(status_code=404, detail="Course not found") from None
+            raise
+    thumbnail_url = thumbnail_url_for(course)
+    if thumbnail_url is None:
+        raise HTTPException(status_code=404, detail="Course thumbnail not found")
+    return {"thumbnail_url": thumbnail_url}
+
+
 @router.get("/mine", response_model=list[CourseRead], dependencies=[Depends(require_approved_teacher_or_admin)])
 def my_courses(user: CurrentUser, session: SessionDep) -> list[Course]:
-    statement = select(Course)
+    statement = select(Course).options(selectinload(Course.thumbnail))
     if user.role != "administrator":
         statement = statement.where(Course.instructor_id == user.id)
-    return list(session.exec(statement.order_by(Course.updated_at.desc())).all())
+    courses = session.exec(statement.order_by(Course.updated_at.desc())).all()
+    return [CourseRead.model_validate(course).model_copy(update={"thumbnail_url": thumbnail_url_for(course)}) for course in courses]
 
 
 @router.get("", response_model=list[CourseRead])
 def list_courses(session: SessionDep, q: str | None = None, category_id: UUID | None = None, limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> list[Course]:
-    statement = select(Course).where(Course.status == "published")
+    statement = select(Course).where(Course.status == "published").options(selectinload(Course.thumbnail))
     if q:
         statement = statement.where(Course.title.ilike(f"%{q}%"))
     if category_id:
         statement = statement.where(Course.category_id == category_id)
-    return list(session.exec(statement.order_by(Course.created_at.desc()).offset(offset).limit(limit)).all())
+    courses = session.exec(statement.order_by(Course.created_at.desc()).offset(offset).limit(limit)).all()
+    return [CourseRead.model_validate(course).model_copy(update={"thumbnail_url": thumbnail_url_for(course)}) for course in courses]
 
 
 @router.get("/{course_id}", response_model=CourseRead)
-def course_detail(course_id: UUID, session: SessionDep) -> Course:
-    course = session.get(Course, course_id)
+def course_detail(course_id: UUID, session: SessionDep) -> CourseRead:
+    course = session.exec(
+        select(Course)
+        .where(Course.id == course_id)
+        .options(selectinload(Course.thumbnail))
+    ).first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     if course.status != "published":
         raise HTTPException(status_code=404, detail="Course not found")
-    return course
+    return CourseRead.model_validate(course).model_copy(update={"thumbnail_url": thumbnail_url_for(course)})
 
 
 @router.post("", response_model=CourseRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_approved_teacher_or_admin)])

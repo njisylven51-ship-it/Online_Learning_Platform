@@ -17,6 +17,7 @@ class CourseRead(CourseCreate):
     id: UUID
     instructor_id: UUID
     status: str
+    thumbnail_url: str | None = None
 
 
 class ModuleCreate(BaseModel):
