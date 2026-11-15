@@ -1,54 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { assignmentService } from '../services/assignmentService';
 import { ApiError } from '../../../services/api/client';
-import type {
-  Assignment,
-  AssignmentUploadSignature,
-  Submission,
-} from '../types';
-
-async function uploadAssignmentFile(
-  file: File,
-  sig: AssignmentUploadSignature,
-): Promise<string> {
-  const form = new FormData();
-  form.append('file', file);
-  form.append('api_key', sig.api_key);
-  form.append('timestamp', String(sig.timestamp));
-  form.append('signature', sig.signature);
-
-  if (sig.folder) form.append('folder', sig.folder);
-
-  const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
-  let publicId: string;
-  if (sig.public_id) {
-    publicId = sig.public_id;
-  } else if (sig.public_id_prefix) {
-    publicId = `${sig.public_id_prefix}-${Date.now()}.${ext}`;
-  } else {
-    publicId = `assignment-${Date.now()}.${ext}`;
-  }
-  form.append('public_id', publicId);
-
-  const uploadUrl =
-    sig.upload_url ??
-    (sig.cloud_name
-      ? `https://api.cloudinary.com/v1_1/${sig.cloud_name}/raw/upload`
-      : null);
-
-  if (!uploadUrl) throw new Error('Upload signature missing upload_url/cloud_name');
-
-  const res = await fetch(uploadUrl, { method: 'POST', body: form });
-  if (!res.ok) {
-    const errBody = (await res.json().catch(() => ({}))) as {
-      error?: { message?: string };
-    };
-    throw new Error(errBody.error?.message || `Cloudinary upload failed (${res.status})`);
-  }
-
-  const data = (await res.json()) as { public_id: string };
-  return data.public_id;
-}
+import type { Assignment, Submission } from '../types';
 
 export function useLessonAssignments(lessonId: string) {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -81,14 +34,78 @@ export function useLessonAssignments(lessonId: string) {
   const submit = useCallback(
     async (assignmentId: string, text: string, file: File | null) => {
       setSubmitting(assignmentId);
-      setError(null);
+      let uploadedPublicId: string | null = null;
 
       try {
-        let uploadedPublicId: string | null = null;
-
         if (file) {
           const sig = await assignmentService.getUploadSignature();
-          uploadedPublicId = await uploadAssignmentFile(file, sig);
+          console.log('[assignment upload] SIGNATURE:', sig);
+          console.log('[assignment upload] backend resource_type:', sig.resource_type);
+
+          const fileNameWithExt = file.name.toLowerCase().endsWith('.pdf')
+            ? file.name
+            : `${file.name.replace(/\.[^/.]+$/, '')}.pdf`;
+          const fileToUpload = new File([file], fileNameWithExt, {
+            type: 'application/pdf',
+          });
+
+          const formData = new FormData();
+          formData.append('file', fileToUpload);
+          if (sig.api_key) formData.append('api_key', sig.api_key);
+          if (sig.signature) formData.append('signature', sig.signature);
+
+          // Send only the parameters the backend signed
+          // (skip signature, api_key, cloud_name, resource_type, upload_url, public_id)
+          Object.keys(sig).forEach((key) => {
+            if (
+              ![
+                'signature',
+                'api_key',
+                'cloud_name',
+                'resource_type',
+                'upload_url',
+                'public_id',
+              ].includes(key)
+            ) {
+              const value = (sig as any)[key];
+              if (value !== undefined && value !== null) {
+                formData.append(key, String(value));
+              }
+            }
+          });
+
+          // ⚠️ CRITICAL FIX: pick the endpoint based on what the backend signed
+          // so the file lands in the same resource_type bucket the backend will
+          // query with get_resource(public_id, <resource_type>).
+          const signedType = (sig as any).resource_type;
+          let endpoint: 'image' | 'raw' | 'video' = 'raw';
+          if (signedType === 'image') endpoint = 'image';
+          else if (signedType === 'video') endpoint = 'video';
+          // "document" → Cloudinary has no such type → falls back to raw
+
+          const uploadUrl =
+            (sig as any).upload_url ||
+            `https://api.cloudinary.com/v1_1/${sig.cloud_name}/${endpoint}/upload`;
+
+          console.log('[assignment upload] USING ENDPOINT:', uploadUrl);
+
+          const cloudRes = await fetch(uploadUrl, {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!cloudRes.ok) {
+            const errData = await cloudRes.json();
+            console.error('[assignment upload] CLOUDINARY ERROR:', errData);
+            throw new Error(errData.error?.message || 'File upload failed');
+          }
+
+          const cloudData = await cloudRes.json();
+          console.log('[assignment upload] CLOUDINARY RESPONSE:', cloudData);
+
+          // Use Cloudinary's public_id exactly as returned
+          uploadedPublicId = cloudData.public_id;
+          console.log('[assignment upload] FINAL public_id sent to backend:', uploadedPublicId);
         }
 
         const result = await assignmentService.submit(
@@ -96,17 +113,9 @@ export function useLessonAssignments(lessonId: string) {
           text || null,
           uploadedPublicId,
         );
-
         setSubmissions((prev) => ({ ...prev, [assignmentId]: result }));
-        return result;
       } catch (e) {
-        const msg =
-          e instanceof ApiError
-            ? e.info.message
-            : e instanceof Error
-            ? e.message
-            : 'Submission failed.';
-        setError(msg);
+        alert(e instanceof Error ? e.message : 'Submission failed.');
         throw e;
       } finally {
         setSubmitting(null);

@@ -117,14 +117,24 @@ def update_video_progress(
         elapsed = max(0.0, (now - previous_update).total_seconds())
         bounded_position = min(position, duration)
         forward_delta = max(0, bounded_position - progress.furthest_position_seconds)
-        progress.watched_seconds += int(min(forward_delta, elapsed + 1))
+        
+        # --- NEW LOGIC: Guarantee completion if they reached the end ---
+        # If the student reaches the end of the video, bypass the anti-cheat 
+        # timer math and give them full credit for the duration.
+        if bounded_position >= duration:
+            progress.watched_seconds = duration
+        else:
+            progress.watched_seconds += int(min(forward_delta, elapsed + 1))
+        # -------------------------------------------------------------
+
         progress.position_seconds = bounded_position
         progress.furthest_position_seconds = max(
             progress.furthest_position_seconds, bounded_position
         )
         progress.updated_at = now
 
-    progress.completed = progress.watched_seconds >= duration * 0.9
+    # Mark as completed based on your 70% threshold
+    progress.completed = progress.watched_seconds >= duration * 0.7
     session.add(progress)
     session.commit()
     session.refresh(progress)

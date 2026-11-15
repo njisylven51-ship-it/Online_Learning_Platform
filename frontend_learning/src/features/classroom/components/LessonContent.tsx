@@ -71,13 +71,10 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
       setIsCompleted(true);
       onCompleted();
     } catch (e: any) {
-      if (e?.info?.kind === 'conflict' || e?.info?.status === 409) {
-        setError(
-          'You must complete all required activities (watch videos, pass quizzes, submit assignments) before marking this lesson as complete.',
-        );
-      } else {
-        setError(e?.info?.message || 'Failed to mark lesson as complete.');
-      }
+      // FIXED: Show the actual backend message instead of a generic error
+      setError(
+        e?.info?.message || 'Failed to mark lesson as complete.'
+      );
     } finally {
       setCompleting(false);
     }

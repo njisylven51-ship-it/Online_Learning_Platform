@@ -15,58 +15,80 @@ export function VideoPlayer({ videoId, onComplete }: VideoPlayerProps) {
   const lastSaved = useRef<number>(0);
   const endedRef = useRef(false);
 
-  // Refetch URL every 4 minutes to prevent expiration (URLs live for 5 min)
+  // Refetch the signed URL every 4 minutes (they expire after 5)
   useEffect(() => {
     const interval = setInterval(() => refetch(), 4 * 60 * 1000);
     return () => clearInterval(interval);
   }, [refetch]);
 
-  // Core function to extract duration and send progress to backend
-  const saveProgress = async (isEnded = false) => {
-    if (!videoRef.current) return;
-    
-    const currentTime = Math.floor(videoRef.current.currentTime);
-    const totalDuration = videoRef.current.duration;
-
-    // Wait until browser has loaded metadata (duration is a valid number)
-    if (isNaN(totalDuration) || totalDuration === 0) return;
+  /**
+   * Send a progress update to the backend.
+   * Always includes the browser's true duration so the backend can
+   * permanently heal videos that Cloudinary failed to process.
+   */
+  const saveProgress = async (position: number, duration: number) => {
+    if (isNaN(duration) || duration <= 0) {
+      console.warn('[video] skipping save — invalid duration:', duration);
+      return;
+    }
 
     try {
-      await classroomService.updateVideoProgress(
-        videoId, 
-        isEnded ? Math.floor(totalDuration) : currentTime, 
-        totalDuration // <-- Sending the fallback duration!
+      console.log(
+        `[video] saving → position=${position}s duration=${duration.toFixed(2)}s`,
       );
-      lastSaved.current = currentTime;
-    } catch (err) {
-      // Silently catch 409s in case of transient state
-      console.warn('Failed to save video progress', err);
+      await classroomService.updateVideoProgress(videoId, position, duration);
+      lastSaved.current = position;
+    } catch (err: any) {
+      console.error(
+        '[video] save failed:',
+        err?.info?.message || err,
+      );
     }
   };
 
+  // When the browser knows the duration, send it to the backend immediately.
+  // This "heals" videos whose duration came back as 0 from Cloudinary.
+  const handleLoadedMetadata = () => {
+    if (!videoRef.current) return;
+    const duration = videoRef.current.duration;
+    if (duration > 0) {
+      console.log('[video] metadata loaded, duration:', duration.toFixed(2), 's');
+      void saveProgress(0, duration);
+    }
+  };
+
+  // Fires ~4x/second. Send every time we've advanced at least 10s since the last save.
+  // (The old `% 10 === 0` check misses updates due to browser throttling.)
   const handleTimeUpdate = () => {
     if (!videoRef.current || endedRef.current) return;
-    
-    const currentTime = Math.floor(videoRef.current.currentTime);
 
-    // Auto-save every 10 seconds
-    if (
-      currentTime > 0 && 
-      currentTime % 10 === 0 && 
-      currentTime !== lastSaved.current
-    ) {
-      void saveProgress();
+    const currentTime = Math.floor(videoRef.current.currentTime);
+    const duration = videoRef.current.duration;
+
+    if (currentTime - lastSaved.current >= 10) {
+      void saveProgress(currentTime, duration);
     }
+  };
+
+  // Save on pause too — captures the exact position if the student stops early.
+  const handlePause = () => {
+    if (!videoRef.current || endedRef.current) return;
+    const currentTime = Math.floor(videoRef.current.currentTime);
+    const duration = videoRef.current.duration;
+    void saveProgress(currentTime, duration);
   };
 
   const handleEnded = async () => {
     if (endedRef.current) return;
     endedRef.current = true;
-    
-    // Save the final progress (100% watched)
-    await saveProgress(true);
-    
-    // Trigger the completion callback (markComplete in LessonContent)
+
+    if (videoRef.current) {
+      const duration = videoRef.current.duration;
+      // Send the FINAL position = full duration to guarantee ≥ 90% watched
+      await saveProgress(Math.floor(duration), duration);
+    }
+
+    // Trigger lesson completion (markComplete in LessonContent)
     onComplete();
   };
 
@@ -81,8 +103,9 @@ export function VideoPlayer({ videoId, onComplete }: VideoPlayerProps) {
         src={playback.playback_url}
         controls
         className="h-full w-full"
+        onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
-        onPause={() => void saveProgress()}  // <-- Save duration if they pause early
+        onPause={handlePause}
         onEnded={handleEnded}
         controlsList="nodownload"
       >
