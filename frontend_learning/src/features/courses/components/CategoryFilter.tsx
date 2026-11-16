@@ -8,31 +8,26 @@ interface CategoryFilterProps {
 
 export function CategoryFilter({ categories, selectedId, onSelect }: CategoryFilterProps) {
   if (categories.length === 0) return null;
+  
+  const baseClass = 'rounded-full px-5 py-2 text-sm font-bold transition-colors ring-1';
+  const activeClass = 'bg-pastel-lilac text-forest ring-pastel-lilac';
+  const inactiveClass = 'bg-white/5 text-gray-300 ring-white/10 hover:bg-white/10 hover:text-white';
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-3">
       <button
         type="button"
         onClick={() => onSelect('')}
-        className={[
-          'rounded-full px-3 py-1.5 text-sm font-medium transition',
-          selectedId === ''
-            ? 'bg-accent text-forest'
-            : 'bg-forest-tint text-ink-muted hover:bg-forest-tint-strong hover:text-forest',
-        ].join(' ')}
+        className={`${baseClass} ${selectedId === '' ? activeClass : inactiveClass}`}
       >
-        All
+        All Courses
       </button>
       {categories.map((c) => (
         <button
           key={c.id}
           type="button"
           onClick={() => onSelect(c.id)}
-          className={[
-            'rounded-full px-3 py-1.5 text-sm font-medium transition',
-            selectedId === c.id
-              ? 'bg-accent text-forest'
-              : 'bg-forest-tint text-ink-muted hover:bg-forest-tint-strong hover:text-forest',
-          ].join(' ')}
+          className={`${baseClass} ${selectedId === c.id ? activeClass : inactiveClass}`}
         >
           {c.name}
         </button>

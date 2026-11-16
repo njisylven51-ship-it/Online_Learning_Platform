@@ -6,15 +6,15 @@ import { STUDENT_NAV, STUDENT_MOBILE_NAV } from '../config/navigation';
 
 export default function StudentLayout() {
   return (
-    <div className="flex min-h-screen bg-white">
-      <DesktopSidebar brand="Student" items={STUDENT_NAV} />
+    <div className="auth-font flex min-h-screen bg-auth-bg text-white">
+      <DesktopSidebar brand="Student" items={STUDENT_NAV} isDark={true} />
       <div className="flex min-w-0 flex-1 flex-col pb-16 lg:pb-0">
-        <Topbar />
+        <Topbar isDark={true} />
         <main className="flex-1 px-4 py-6 lg:px-8">
           <Outlet />
         </main>
       </div>
-      <MobileBottomNav items={STUDENT_MOBILE_NAV} />
+      <MobileBottomNav items={STUDENT_MOBILE_NAV} isDark={true} />
     </div>
   );
 }

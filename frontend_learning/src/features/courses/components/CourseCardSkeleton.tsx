@@ -1,13 +1,15 @@
 export function CourseCardSkeleton() {
   return (
-    <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
-      <div className="mb-4 aspect-video animate-pulse rounded-md bg-forest-tint-strong" />
-      <div className="h-4 w-3/4 animate-pulse rounded bg-forest-tint-strong" />
-      <div className="mt-2 h-3 w-full animate-pulse rounded bg-forest-tint-strong" />
-      <div className="mt-2 h-3 w-2/3 animate-pulse rounded bg-forest-tint-strong" />
-      <div className="mt-3 flex justify-between">
-        <div className="h-4 w-16 animate-pulse rounded bg-forest-tint-strong" />
-        <div className="h-4 w-14 animate-pulse rounded bg-forest-tint-strong" />
+    <div className="flex h-full flex-col overflow-hidden rounded-3xl bg-white/5 ring-1 ring-white/10">
+      <div className="aspect-[4/3] w-full animate-pulse bg-white/10" />
+      <div className="p-6">
+        <div className="mb-3 h-3 w-1/3 animate-pulse rounded-full bg-white/10" />
+        <div className="mb-2 h-5 w-3/4 animate-pulse rounded-full bg-white/10" />
+        <div className="mb-6 h-4 w-full animate-pulse rounded-full bg-white/10" />
+        <div className="flex justify-between border-t border-white/10 pt-4">
+          <div className="h-4 w-16 animate-pulse rounded-full bg-white/10" />
+          <div className="h-5 w-20 animate-pulse rounded-full bg-white/10" />
+        </div>
       </div>
     </div>
   );

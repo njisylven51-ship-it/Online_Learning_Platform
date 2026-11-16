@@ -6,6 +6,7 @@ import { GuestGuard } from './guards/GuestGuard';
 import { RoleGuard } from './guards/RoleGuard';
 
 const PublicLayout = lazy(() => import('../layouts/PublicLayout'));
+const AuthLayout = lazy(() => import('../layouts/AuthLayout')); // <-- NEW
 const StudentLayout = lazy(() => import('../layouts/StudentLayout'));
 const TeacherLayout = lazy(() => import('../layouts/TeacherLayout'));
 const AdminLayout = lazy(() => import('../layouts/AdminLayout'));
@@ -19,7 +20,6 @@ const HomePage = lazy(() => import('../features/courses/pages/HomePage'));
 
 const Login = lazy(() => import('../features/auth/pages/Login'));
 const Register = lazy(() => import('../features/auth/pages/Register'));
-const TeacherRegister = lazy(() => import('../features/auth/pages/TeacherRegister'));
 const ForgotPassword = lazy(() => import('../features/auth/pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('../features/auth/pages/ResetPassword'));
 const ChangePassword = lazy(() => import('../features/auth/pages/ChangePassword'));
@@ -52,9 +52,7 @@ const TeacherHome = lazy(
 );
 const MyCourses = lazy(() => import('../features/teacher/pages/MyCourses'));
 const CreateCourse = lazy(() => import('../features/teacher/pages/CreateCourse'));
-// ADDED: Import for EditCourse
-const EditCourse = lazy(() => import('../features/teacher/pages/EditCourse.tsx'));
-
+const EditCourse = lazy(() => import('../features/teacher/pages/EditCourse'));
 const TeacherAssignments = lazy(
   () => import('../features/teacher/pages/TeacherAssignments'),
 );
@@ -92,12 +90,11 @@ export function AppRouter() {
           <Route path="certificates/verify/:code" element={<CertificateVerify />} />
         </Route>
 
-        {/* Guest only */}
+        {/* Guest only — USES AuthLayout */}
         <Route element={<GuestGuard />}>
-          <Route element={<PublicLayout />}>
+          <Route element={<AuthLayout />}>
             <Route path="login" element={<Login />} />
             <Route path="register" element={<Register />} />
-            <Route path="register/teacher" element={<TeacherRegister />} />
             <Route path="forgot-password" element={<ForgotPassword />} />
             <Route path="reset-password" element={<ResetPassword />} />
           </Route>
@@ -116,10 +113,9 @@ export function AppRouter() {
             <Route path="student" element={<StudentLayout />}>
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<StudentDashboard />} />
-              {/* ADDED: In-built course browsing for students */}
+              {/* In-built course browsing for students */}
               <Route path="courses" element={<CourseCatalog />} />
               <Route path="courses/:courseId" element={<CourseDetails />} />
-              {/* ------------------------------------------- */}
               <Route path="my-learning" element={<StudentMyLearning />} />
               <Route path="progress" element={<StudentProgress />} />
               <Route path="profile" element={<StudentProfile />} />
@@ -139,9 +135,7 @@ export function AppRouter() {
               <Route path="dashboard" element={<TeacherHome />} />
               <Route path="courses" element={<MyCourses />} />
               <Route path="courses/create" element={<CreateCourse />} />
-              {/* ADDED: Route for the Course Editor */}
               <Route path="courses/:courseId/edit" element={<EditCourse />} />
-              
               <Route path="assignments" element={<TeacherAssignments />} />
               <Route path="profile" element={<TeacherProfile />} />
             </Route>
