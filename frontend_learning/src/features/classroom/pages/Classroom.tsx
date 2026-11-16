@@ -48,7 +48,9 @@ export default function Classroom() {
   const backLink = role === 'student' ? '/student/courses' : '/courses';
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col md:flex-row bg-surface text-carbon">
+    // Added overflow-hidden to prevent the outer page from scrolling
+    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-surface md:p-2 lg:p-4">
+      
       {/* Mobile Header */}
       <div className="flex items-center justify-between border-b border-surface-container bg-surface-container-lowest p-4 md:hidden">
         <div>
@@ -57,31 +59,62 @@ export default function Classroom() {
         </div>
         <button 
           onClick={() => setSidebarOpen(true)} 
-          className="rounded-full border border-surface-container bg-surface-container-lowest px-4 py-2 text-sm font-bold text-carbon shadow-sm"
+          className="rounded-lg border border-surface-container bg-surface-container-lowest px-4 py-2 text-sm font-bold text-carbon shadow-sm"
         >
           Curriculum
         </button>
       </div>
 
-      {/* Desktop Sidebar */}
-      <div className="hidden w-80 shrink-0 border-r border-surface-container md:block bg-surface-container-lowest">
-        <div className="border-b border-surface-container p-6">
-          <Link to={backLink} className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:text-on-primary-container transition">
-            ← Back to courses
-          </Link>
-          <h2 className="mt-3 text-xl font-extrabold text-carbon">{course?.title}</h2>
+      {/* UNIFIED CONTAINER */}
+      <div className="flex flex-1 overflow-hidden bg-surface-container-lowest md:rounded-xl md:border md:border-surface-container md:shadow-[0_8px_24px_rgba(18,18,20,0.04)]">
+        
+        {/* Sidebar Desktop */}
+        <div className="hidden w-80 shrink-0 border-r border-surface-container md:block">
+          <div className="border-b border-surface-container p-6">
+            <Link to={backLink} className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:text-on-primary-container transition">
+              ← Back to courses
+            </Link>
+            <h2 className="mt-3 text-xl font-extrabold text-carbon">{course?.title}</h2>
+          </div>
+          <div className="h-[calc(100%-6rem)]">
+            <CourseSidebar
+              modules={modules ?? []}
+              activeLessonId={activeLessonId ?? ''}
+              onSelectLesson={setActiveLessonId}
+              progress={progress}
+            />
+          </div>
         </div>
-        <div className="h-[calc(100%-6rem)]">
-          <CourseSidebar
-            modules={modules ?? []}
-            activeLessonId={activeLessonId ?? ''}
-            onSelectLesson={setActiveLessonId}
-            progress={progress}
-          />
-        </div>
+
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-y-auto no-scrollbar">
+          <div className="mx-auto max-w-7xl p-6 sm:p-10">
+            {lessonLoading && <LoadingState message="Loading lesson…" />}
+            {lessonError && <ErrorState message={lessonError} />}
+            
+            {lesson && (
+              <>
+                <LessonContent
+                  key={lesson.id}
+                  lesson={lesson}
+                  resources={resources}
+                  onCompleted={() => refetch()}
+                  onRefreshResources={refetchLesson}
+                />
+                <LessonNavigation
+                  hasPrev={hasPrev}
+                  hasNext={hasNext}
+                  onPrev={() => setActiveLessonId(flatLessons[activeIndex - 1].id)}
+                  onNext={() => setActiveLessonId(flatLessons[activeIndex + 1].id)}
+                />
+              </>
+            )}
+          </div>
+        </main>
+
       </div>
 
-      {/* Mobile Sidebar Overlay */}
+      {/* Mobile Sidebar Overlay Drawer */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-carbon/20 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
@@ -90,7 +123,7 @@ export default function Classroom() {
               <span className="font-extrabold text-carbon">Curriculum</span>
               <button onClick={() => setSidebarOpen(false)} className="text-outline hover:text-carbon">✕</button>
             </div>
-            <div className="h-[calc(100%-4rem)]">
+            <div className="h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
               <CourseSidebar
                 modules={modules ?? []}
                 activeLessonId={activeLessonId ?? ''}
@@ -101,32 +134,6 @@ export default function Classroom() {
           </div>
         </div>
       )}
-
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
-        <div className="mx-auto max-w-4xl">
-          {lessonLoading && <LoadingState message="Loading lesson…" />}
-          {lessonError && <ErrorState message={lessonError} />}
-          
-          {lesson && (
-            <div className="rounded-[2rem] border border-surface-container bg-surface-container-lowest p-6 sm:p-10 shadow-[0_8px_24px_rgba(18,18,20,0.04)]">
-              <LessonContent
-                key={lesson.id}
-                lesson={lesson}
-                resources={resources}
-                onCompleted={() => refetch()}
-                onRefreshResources={refetchLesson}
-              />
-              <LessonNavigation
-                hasPrev={hasPrev}
-                hasNext={hasNext}
-                onPrev={() => setActiveLessonId(flatLessons[activeIndex - 1].id)}
-                onNext={() => setActiveLessonId(flatLessons[activeIndex + 1].id)}
-              />
-            </div>
-          )}
-        </div>
-      </main>
     </div>
   );
 }

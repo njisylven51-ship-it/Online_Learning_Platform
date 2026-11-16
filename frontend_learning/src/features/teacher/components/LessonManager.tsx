@@ -3,13 +3,14 @@ import { useLessonManager } from '../hooks/useLessonManager';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Textarea } from '../../../components/ui/Textarea';
-import { Badge } from '../../../components/ui/Badge';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { QuizBuilder } from './QuizBuilder';
+import { Modal } from '../../../components/ui/Modal';
+import { VideoPlayer } from '../../classroom/components/VideoPlayer';
 
 export function LessonManager({ moduleId }: { moduleId: string }) {
   const { 
-    lessons, loading, creating, uploadingVideo, uploadingPdf, creatingAssignment,
+    lessons, resources, assignments, quizzes, loading, creating, uploadingVideo, uploadingPdf, creatingAssignment,
     fetchLessons, createLesson, uploadVideo, uploadPdf, createAssignment
   } = useLessonManager(moduleId);
 
@@ -18,12 +19,17 @@ export function LessonManager({ moduleId }: { moduleId: string }) {
   const [content, setContent] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
 
+  // Assignment Form State
   const [assigningToLessonId, setAssigningToLessonId] = useState<string | null>(null);
   const [assignTitle, setAssignTitle] = useState('');
   const [assignDesc, setAssignDesc] = useState('');
   const [assignMaxScore, setAssignMaxScore] = useState('100');
 
+  // Quiz Builder State
   const [quizzingLessonId, setQuizzingLessonId] = useState<string | null>(null);
+
+  // Preview Modal State
+  const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchLessons();
@@ -40,7 +46,7 @@ export function LessonManager({ moduleId }: { moduleId: string }) {
     if (!file) return;
     if (!file.type.startsWith('video/')) { alert('Please select a valid video file.'); return; }
     void uploadVideo(lessonId, file);
-    e.target.value = ''; // reset so they can upload the same file again
+    e.target.value = '';
   }
 
   function handlePdfChange(e: React.ChangeEvent<HTMLInputElement>, lessonId: string) {
@@ -62,92 +68,163 @@ export function LessonManager({ moduleId }: { moduleId: string }) {
   if (loading) return <LoadingState message="Loading lessons…" />;
 
   return (
-    <div className="mt-4 space-y-4 border-l-4 border-accent-tint bg-forest-tint/30 p-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-bold uppercase tracking-wider text-forest">Lessons</h4>
-        {!isAdding && <Button size="sm" variant="secondary" onClick={() => setIsAdding(true)}>+ Add Lesson</Button>}
+        <h4 className="text-lg font-extrabold text-carbon">Lessons</h4>
+        {!isAdding && (
+          <Button onClick={() => setIsAdding(true)} className="rounded-lg bg-carbon text-white font-bold px-5">
+            + Add Lesson
+          </Button>
+        )}
       </div>
 
       {isAdding && (
-        <form onSubmit={handleAddLesson} className="rounded-xl border border-line bg-white p-4 shadow-sm space-y-4">
+        <form onSubmit={handleAddLesson} className="space-y-4 rounded-xl border border-primary-container bg-primary-container/20 p-6">
           <Input label="Lesson Title" value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="e.g. Setting up your environment" />
           <Textarea label="Text Content (Optional)" value={content} onChange={(e) => setContent(e.target.value)} rows={3} />
           <Input label="YouTube URL (Optional)" value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setIsAdding(false)}>Cancel</Button>
-            <Button type="submit" size="sm" disabled={creating}>Save Lesson</Button>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setIsAdding(false)} className="rounded-lg text-on-surface-variant hover:bg-surface-container">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={creating} className="rounded-lg bg-carbon text-white font-bold px-6">
+              Save Lesson
+            </Button>
           </div>
         </form>
       )}
 
       {lessons.length === 0 && !isAdding ? (
-        <p className="text-sm text-ink-muted">No lessons in this module yet.</p>
+        <div className="rounded-xl border border-dashed border-outline-variant p-8 text-center">
+          <p className="text-sm font-medium text-on-surface-variant">No lessons in this module yet.</p>
+        </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-4">
           {lessons.map((lesson) => {
             const videos = lesson.videos ?? [];
-            const readyVideos = videos.filter((v: any) => v.status === 'ready');
+            const pdfs = resources[lesson.id] ?? [];
+            const lessonAssignments = assignments[lesson.id] ?? [];
+            const lessonQuizzes = quizzes[lesson.id] ?? [];
 
             return (
-              <div key={lesson.id} className="flex flex-col gap-3 rounded-lg border border-line bg-white p-3 shadow-sm">
-                <div className="flex items-center justify-between">
+              <div key={lesson.id} className="flex flex-col gap-4 rounded-xl border border-surface-container bg-surface-container-lowest p-6 shadow-sm">
+                
+                {/* Lesson Header */}
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-surface-container pb-4">
                   <div>
-                    <p className="font-medium text-forest">{lesson.title}</p>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {lesson.youtube_url && <Badge tone="info">YouTube</Badge>}
-                      {readyVideos.length > 0 && (
-                        <Badge tone="success">
-                          {readyVideos.length} Video{readyVideos.length > 1 ? 's' : ''}
-                        </Badge>
-                      )}
-                      {!lesson.youtube_url && readyVideos.length === 0 && (
-                        <Badge tone="neutral">Text Only</Badge>
-                      )}
-                    </div>
+                    <h4 className="text-base font-bold text-carbon">{lesson.title}</h4>
                   </div>
                 </div>
 
-                {/* Show what's uploaded */}
-                {readyVideos.length > 0 && (
-                  <div className="text-xs text-ink-muted">
-                    <span className="font-medium text-forest">Uploaded videos:</span>{' '}
-                    {readyVideos.map((v: any, i: number) => `#${i + 1} (${v.format})`).join(', ')}
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
-                  <label className={`cursor-pointer inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-medium transition ${uploadingVideo === lesson.id ? 'bg-gray-100 text-gray-400' : 'bg-accent-tint text-accent-deep hover:bg-accent hover:text-forest'}`}>
-                    {uploadingVideo === lesson.id ? 'Uploading...' : '+ Upload Video'}
+                {/* Upload Actions */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className={`cursor-pointer inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs font-bold transition ${uploadingVideo === lesson.id ? 'bg-surface-container text-outline' : 'bg-primary-container text-on-primary-container hover:bg-primary-container/80'}`}>
+                    {uploadingVideo === lesson.id ? 'Uploading...' : 'Upload Video'}
                     <input type="file" accept="video/*" className="hidden" disabled={uploadingVideo !== null} onChange={(e) => handleFileChange(e, lesson.id)} />
                   </label>
 
-                  <label className={`cursor-pointer inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-medium transition ${uploadingPdf === lesson.id ? 'bg-gray-100 text-gray-400' : 'bg-forest-tint text-forest hover:bg-forest hover:text-white'}`}>
-                    {uploadingPdf === lesson.id ? 'Uploading...' : '+ Upload PDF'}
+                  <label className={`cursor-pointer inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs font-bold transition ${uploadingPdf === lesson.id ? 'bg-surface-container text-outline' : 'bg-surface-container text-carbon hover:bg-surface-container-high'}`}>
+                    {uploadingPdf === lesson.id ? 'Uploading...' : 'Upload PDF'}
                     <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={uploadingPdf !== null} onChange={(e) => handlePdfChange(e, lesson.id)} />
                   </label>
 
-                  <Button size="sm" variant="secondary" className="text-xs" onClick={() => setAssigningToLessonId(assigningToLessonId === lesson.id ? null : lesson.id)}>
+                  <Button 
+                    size="sm" 
+                    className="rounded-lg bg-surface-container text-carbon hover:bg-surface-container-high text-xs font-bold px-4" 
+                    onClick={() => setAssigningToLessonId(assigningToLessonId === lesson.id ? null : lesson.id)}
+                  >
                     + Assignment
                   </Button>
 
-                  <Button size="sm" variant="secondary" className="text-xs" onClick={() => setQuizzingLessonId(quizzingLessonId === lesson.id ? null : lesson.id)}>
+                  <Button 
+                    size="sm" 
+                    className="rounded-lg bg-surface-container text-carbon hover:bg-surface-container-high text-xs font-bold px-4" 
+                    onClick={() => setQuizzingLessonId(quizzingLessonId === lesson.id ? null : lesson.id)}
+                  >
                     + Quiz
                   </Button>
                 </div>
 
+                {/* Media & Resources Preview */}
+                {(videos.length > 0 || pdfs.length > 0) && (
+                  <div className="mt-2 rounded-lg bg-surface-container/50 p-4">
+                    <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-outline mb-3">Uploaded Media & Resources</h5>
+                    <div className="flex flex-wrap gap-3">
+                      {videos.map((v: any, idx: number) => (
+                        <button 
+                          key={v.id}
+                          onClick={() => setPreviewVideoId(v.id)}
+                          className="flex items-center gap-2 rounded-lg border border-surface-container bg-surface-container-lowest px-4 py-2 text-sm font-bold text-carbon shadow-sm transition hover:bg-surface-container-high"
+                        >
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-container text-on-primary-container">
+                            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                          </div>
+                          Play Video {videos.length > 1 ? `#${idx + 1}` : ''}
+                        </button>
+                      ))}
+
+                      {pdfs.map((r: any) => (
+                        <a 
+                          key={r.id}
+                          href={r.download_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 rounded-lg border border-surface-container bg-surface-container-lowest px-4 py-2 text-sm font-bold text-carbon shadow-sm transition hover:bg-surface-container-high"
+                        >
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container">
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                          </div>
+                          View {r.title}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Assessments Preview */}
+                {(lessonAssignments.length > 0 || lessonQuizzes.length > 0) && (
+                  <div className="mt-2 rounded-lg bg-surface-container/50 p-4">
+                    <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-outline mb-3">Assessments</h5>
+                    <div className="flex flex-wrap gap-3">
+                      {lessonAssignments.map((a: any) => (
+                        <div key={a.id} className="flex items-center gap-2 rounded-lg border border-surface-container bg-surface-container-lowest px-4 py-2 text-sm font-bold text-carbon shadow-sm">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-tertiary-container text-on-tertiary-container">
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                          </div>
+                          Assignment: {a.title} (Max: {a.max_score})
+                        </div>
+                      ))}
+                      {lessonQuizzes.map((q: any) => (
+                        <div key={q.id} className="flex items-center gap-2 rounded-lg border border-surface-container bg-surface-container-lowest px-4 py-2 text-sm font-bold text-carbon shadow-sm">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-container text-on-primary-container">
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          </div>
+                          Quiz: {q.title} (Pass: {q.passing_score}%)
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Add Assignment Form */}
                 {assigningToLessonId === lesson.id && (
-                  <form onSubmit={(e) => handleAddAssignment(e, lesson.id)} className="mt-2 space-y-3 rounded-lg border border-accent bg-accent-tint p-3">
+                  <form onSubmit={(e) => handleAddAssignment(e, lesson.id)} className="mt-2 space-y-4 rounded-xl border border-tertiary-container bg-tertiary-container/20 p-5">
+                    <h5 className="text-sm font-extrabold text-on-tertiary-container">New Assignment</h5>
                     <Input label="Assignment Title" value={assignTitle} onChange={(e) => setAssignTitle(e.target.value)} required />
                     <Textarea label="Instructions" value={assignDesc} onChange={(e) => setAssignDesc(e.target.value)} rows={2} required />
                     <Input label="Max Score" type="number" value={assignMaxScore} onChange={(e) => setAssignMaxScore(e.target.value)} required />
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setAssigningToLessonId(null)}>Cancel</Button>
-                      <Button type="submit" size="sm" disabled={creatingAssignment === lesson.id}>Save Assignment</Button>
+                    <div className="flex justify-end gap-3 pt-2">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setAssigningToLessonId(null)} className="rounded-lg text-on-surface-variant hover:bg-surface-container">
+                        Cancel
+                      </Button>
+                      <Button type="submit" size="sm" disabled={creatingAssignment === lesson.id} className="rounded-lg bg-carbon text-white font-bold px-5">
+                        Save Assignment
+                      </Button>
                     </div>
                   </form>
                 )}
 
+                {/* Quiz Builder */}
                 {quizzingLessonId === lesson.id && (
                   <div className="mt-2">
                     <QuizBuilder 
@@ -162,6 +239,17 @@ export function LessonManager({ moduleId }: { moduleId: string }) {
           })}
         </div>
       )}
+
+      {/* Video Preview Modal */}
+      <Modal
+        open={!!previewVideoId}
+        onClose={() => setPreviewVideoId(null)}
+        title="Video Preview"
+      >
+        {previewVideoId && (
+          <VideoPlayer videoId={previewVideoId} onComplete={() => {}} />
+        )}
+      </Modal>
     </div>
   );
 }

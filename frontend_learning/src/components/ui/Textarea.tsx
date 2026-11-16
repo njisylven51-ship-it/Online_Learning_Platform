@@ -12,9 +12,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={id} className="mb-1 block text-sm font-medium text-forest">
+          <label htmlFor={id} className="mb-2 block text-sm font-bold text-carbon ml-1">
             {label}
-            {required && <span className="ml-1 text-accent">*</span>}
+            {required && <span className="ml-1 text-error">*</span>}
           </label>
         )}
         <textarea
@@ -25,22 +25,21 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           className={[
-            'block w-full rounded-lg border bg-white px-3 py-2 text-sm text-ink shadow-sm',
-            'transition placeholder:text-ink-subtle',
-            'focus:outline-none focus:ring-2',
-            'disabled:cursor-not-allowed disabled:bg-forest-tint disabled:text-ink-muted',
-            error
-              ? 'border-red-400 focus:border-red-400 focus:ring-red-400'
-              : 'border-line focus:border-accent focus:ring-accent',
+            'block w-full rounded-lg border border-surface-container bg-surface-container-lowest px-5 py-3.5 text-sm font-semibold text-carbon shadow-sm',
+            'transition placeholder:text-outline',
+            // Changed from green (accent) to purple (primary-container)
+            'focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-primary-container',
+            'disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-on-surface-variant',
+            error ? 'border-error focus:border-error focus:ring-error' : '',
             className,
           ].join(' ')}
           {...rest}
         />
         {hint && !error && (
-          <p id={`${id}-hint`} className="mt-1 text-xs text-ink-muted">{hint}</p>
+          <p id={`${id}-hint`} className="mt-2 ml-1 text-xs font-medium text-on-surface-variant">{hint}</p>
         )}
         {error && (
-          <p id={`${id}-error`} className="mt-1 text-xs text-red-600">{error}</p>
+          <p id={`${id}-error`} className="mt-2 ml-1 text-xs font-bold text-error">{error}</p>
         )}
       </div>
     );

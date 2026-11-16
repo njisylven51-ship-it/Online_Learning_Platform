@@ -2,15 +2,8 @@ import { client } from '../../../services/api/client';
 import { session } from '../../../services/storage/session';
 import { env } from '../../../config/env';
 import type {
-  Category,
-  CloudinarySignature,
-  Course,
-  CourseCreatePayload,
-  CourseQuery,
-  AssignmentCreatePayload,
-  InstructorProfile,
-  LessonCreatePayload,
-  ResourceConfirmPayload,
+  Category, CloudinarySignature, Course, CourseCreatePayload, CourseQuery,
+  AssignmentCreatePayload, InstructorProfile, LessonCreatePayload, ResourceConfirmPayload,
 } from '../types';
 
 export const courseService = {
@@ -21,9 +14,7 @@ export const courseService = {
     if (query.categoryId) params.set('category_id', query.categoryId);
     params.set('limit', String(query.limit ?? 20));
     params.set('offset', String(query.offset ?? 0));
-    return client.get<Course[]>(`/courses?${params.toString()}`, {
-      anonymous: true,
-    });
+    return client.get<Course[]>(`/courses?${params.toString()}`, { anonymous: true });
   },
 
   getCourse(courseId: string): Promise<Course> {
@@ -35,9 +26,7 @@ export const courseService = {
   },
 
   getInstructorProfile(userId: string): Promise<InstructorProfile> {
-    return client.get<InstructorProfile>(`/instructors/${userId}/profile`, {
-      anonymous: true,
-    });
+    return client.get<InstructorProfile>(`/instructors/${userId}/profile`, { anonymous: true });
   },
 
   // --- Teacher Course Management ---
@@ -53,19 +42,29 @@ export const courseService = {
     return client.post<Course>(`/courses/${courseId}/submit`);
   },
 
+  // --- Thumbnail Management ---
+  getThumbnailSignature(): Promise<CloudinarySignature> {
+    return client.post<CloudinarySignature>('/courses/upload-signature');
+  },
+
+  confirmThumbnail(courseId: string, publicId: string): Promise<{ thumbnail_url: string }> {
+    return client.put<{ thumbnail_url: string }>(`/courses/${courseId}/thumbnail`, { public_id: publicId });
+  },
+
+  deleteThumbnail(courseId: string): Promise<void> {
+    return client.delete<void>(`/courses/${courseId}/thumbnail`);
+  },
+
   // --- Modules ---
   getModules(courseId: string): Promise<any[]> {
     return client.get<any[]>(`/courses/${courseId}/modules`);
   },
 
-  createModule(
-    courseId: string, 
-    payload: { title: string; description: string; position: number }
-  ): Promise<any> {
+  createModule(courseId: string, payload: { title: string; description: string; position: number }): Promise<any> {
     return client.post<any>(`/courses/${courseId}/modules`, payload);
   },
 
-  // --- Lessons ---
+  // --- Lessons & Resources ---
   getLessons(moduleId: string): Promise<any[]> {
     return client.get<any[]>(`/modules/${moduleId}/lessons`);
   },
@@ -74,13 +73,25 @@ export const courseService = {
     return client.post<any>(`/modules/${moduleId}/lessons`, payload);
   },
 
-  // --- Video Upload Flow (Cloudinary) ---
+  getLessonResources(lessonId: string): Promise<any[]> {
+    return client.get<any[]>(`/resources/lessons/${lessonId}`);
+  },
+
+  // --- Video Upload Flow ---
   getVideoUploadSignature(lessonId: string): Promise<CloudinarySignature> {
     return client.post<CloudinarySignature>('/videos/upload-signature', { lesson_id: lessonId });
   },
 
   confirmVideoUpload(lessonId: string, publicId: string): Promise<any> {
     return client.post<any>('/videos/confirm', { lesson_id: lessonId, public_id: publicId });
+  },
+
+  retryVideoProcessing(videoId: string): Promise<any> {
+    return client.post<any>(`/videos/${videoId}/retry`);
+  },
+
+  getLessonVideos(lessonId: string): Promise<any[]> {
+    return client.get<any[]>(`/videos/lessons/${lessonId}`);
   },
 
   // --- Assignments ---
@@ -93,37 +104,18 @@ export const courseService = {
     return client.post<CloudinarySignature>(`/resources/upload-signature?kind=${kind}`);
   },
 
-    confirmResource(payload: ResourceConfirmPayload): Promise<any> {
+  confirmResource(payload: ResourceConfirmPayload): Promise<any> {
     const token = session.getToken();
     return fetch(`${env.apiBaseUrl}/resources/confirm`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(payload),
     }).then(async (res) => {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        console.error('[confirmResource] failed:', res.status, errorData);
-        // Surface the actual backend message
-        throw new Error(errorData.detail || `Failed to confirm resource (${res.status})`);
+        throw new Error(errorData.detail || 'Failed to confirm resource');
       }
       return res.json();
     });
   },
-    // Add this to trigger the backend to re-check Cloudinary for video duration
-  syncVideo(videoId: string): Promise<any> {
-    return client.post<any>(`/videos/${videoId}/retry`);
-  },
-  // Add these inside the courseService object:
-
-  retryVideoProcessing(videoId: string): Promise<any> {
-    return client.post<any>(`/videos/${videoId}/retry`);
-  },
-
-  getLessonVideos(lessonId: string): Promise<any[]> {
-    return client.get<any[]>(`/videos/lessons/${lessonId}`);
-  },
-  
 };

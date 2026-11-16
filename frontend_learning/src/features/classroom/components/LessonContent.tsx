@@ -113,8 +113,9 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
                 key={i}
                 type="button"
                 onClick={() => setSelectedIndex(i)}
+                // Changed rounded-full to rounded-lg
                 className={[
-                  'rounded-full px-5 py-2 text-sm font-bold transition-all border',
+                  'rounded-lg px-5 py-2 text-sm font-bold transition-all border',
                   selectedIndex === i
                     ? 'bg-carbon text-white border-carbon shadow-md'
                     : 'bg-surface-container text-on-surface-variant border-transparent hover:bg-surface-container-high hover:text-carbon',
@@ -129,7 +130,8 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
 
         <div className="mt-6">
           {selected?.kind === 'video' && !selected.isReady && (
-            <div className="flex aspect-video w-full flex-col items-center justify-center rounded-2xl border border-surface-container bg-surface-container text-carbon">
+            // Changed rounded-2xl to rounded-xl
+            <div className="flex aspect-video w-full flex-col items-center justify-center rounded-xl border border-surface-container bg-surface-container text-carbon">
               <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
               <p className="text-base font-bold">Video is still processing...</p>
             </div>
@@ -143,12 +145,14 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
             const ytId = extractYouTubeId(selected.url);
             return ytId ? (
               <div className="space-y-3">
-                <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-carbon ring-1 ring-surface-container">
+                {/* Changed rounded-2xl to rounded-xl */}
+                <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-carbon ring-1 ring-surface-container">
                   <iframe src={`https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1`} title={lesson.title} className="h-full w-full" allowFullScreen />
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-error-container bg-error-container p-4 text-sm font-bold text-on-error-container">
+              // Changed rounded-2xl to rounded-xl
+              <div className="rounded-xl border border-error-container bg-error-container p-4 text-sm font-bold text-on-error-container">
                 The YouTube link is invalid.
               </div>
             );
@@ -167,9 +171,11 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
           <h3 className="text-xl font-extrabold text-carbon">Lesson Resources</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             {pdfs.map((r) => (
-              <div key={r.id} className="flex items-center justify-between rounded-2xl border border-surface-container bg-surface-container-lowest p-5 shadow-sm">
+              // Changed rounded-2xl to rounded-xl
+              <div key={r.id} className="flex items-center justify-between rounded-xl border border-surface-container bg-surface-container-lowest p-5 shadow-sm">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+                  {/* Changed rounded-xl to rounded-lg */}
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary-container text-on-primary-container">
                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                   </div>
                   <div>
@@ -177,7 +183,8 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
                     <p className="text-xs font-bold text-on-surface-variant">{r.size_bytes ? `${(r.size_bytes / 1024 / 1024).toFixed(2)} MB` : 'PDF Document'}</p>
                   </div>
                 </div>
-                <button onClick={() => handleDownload(r)} disabled={downloading === r.id} className="ml-4 shrink-0 rounded-full bg-carbon px-4 py-2 text-xs font-extrabold text-white transition hover:bg-carbon-light disabled:opacity-50">
+                {/* Changed rounded-full to rounded-lg */}
+                <button onClick={() => handleDownload(r)} disabled={downloading === r.id} className="ml-4 shrink-0 rounded-lg bg-carbon px-4 py-2 text-xs font-extrabold text-white transition hover:bg-carbon-light disabled:opacity-50">
                   {downloading === r.id ? '...' : 'Download'}
                 </button>
               </div>
@@ -190,7 +197,8 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
       <QuizSection lessonId={lesson.id} onQuizPassed={() => setError(null)} />
 
       <div className="flex flex-col items-end gap-4 border-t border-surface-container pt-8">
-        {error && <div className="w-full rounded-xl border border-error-container bg-error-container p-4 text-sm font-bold text-on-error-container">{error}</div>}
+        {/* Changed rounded-xl to rounded-lg */}
+        {error && <div className="w-full rounded-lg border border-error-container bg-error-container p-4 text-sm font-bold text-on-error-container">{error}</div>}
         
         {isCompleted ? (
           <span className="flex items-center gap-2 text-base font-extrabold text-secondary">
@@ -198,7 +206,8 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
             Lesson Completed
           </span>
         ) : (
-          <Button onClick={markComplete} disabled={completing} className="rounded-full bg-carbon text-white font-extrabold text-base px-8 py-3.5 hover:bg-carbon-light">
+          // Changed rounded-full to rounded-lg
+          <Button onClick={markComplete} disabled={completing} className="rounded-lg bg-carbon text-white font-extrabold text-base px-8 py-3.5 hover:bg-carbon-light">
             {completing ? 'Saving…' : 'Mark as Complete'}
           </Button>
         )}

@@ -1,10 +1,16 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { courseService } from '../../courses/services/courseService';
+import { assignmentService } from '../../assignments/services/assignmentService';
+import { quizService } from '../../quizzes/services/quizService';
 import { ApiError } from '../../../services/api/client';
 import type { LessonCreatePayload, AssignmentCreatePayload } from '../../courses/types';
 
 export function useLessonManager(moduleId: string) {
   const [lessons, setLessons] = useState<any[]>([]);
+  const [resources, setResources] = useState<Record<string, any[]>>({});
+  const [assignments, setAssignments] = useState<Record<string, any[]>>({});
+  const [quizzes, setQuizzes] = useState<Record<string, any[]>>({});
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -12,17 +18,36 @@ export function useLessonManager(moduleId: string) {
   const [uploadingPdf, setUploadingPdf] = useState<string | null>(null);
   const [creatingAssignment, setCreatingAssignment] = useState<string | null>(null);
 
+  const fetchLessonData = useCallback(async (lessonId: string) => {
+    try {
+      // Fetch all related data in parallel
+      const [resData, assignData, quizData] = await Promise.all([
+        courseService.getLessonResources(lessonId).catch(() => []),
+        assignmentService.getForLesson(lessonId).catch(() => []),
+        quizService.getQuizzesForLesson(lessonId).catch(() => [])
+      ]);
+      
+      setResources(prev => ({ ...prev, [lessonId]: resData }));
+      setAssignments(prev => ({ ...prev, [lessonId]: assignData }));
+      setQuizzes(prev => ({ ...prev, [lessonId]: quizData }));
+    } catch (e) {
+      console.error('Failed to load data for lesson', lessonId, e);
+    }
+  }, []);
+
   const fetchLessons = useCallback(async () => {
     setLoading(true);
     try {
       const data = await courseService.getLessons(moduleId);
       setLessons(data.sort((a, b) => a.position - b.position));
+      // Fetch related data for all lessons in parallel
+      await Promise.all(data.map((l: any) => fetchLessonData(l.id)));
     } catch (e) {
       setError(e instanceof ApiError ? e.info.message : 'Failed to load lessons.');
     } finally {
       setLoading(false);
     }
-  }, [moduleId]);
+  }, [moduleId, fetchLessonData]);
 
   const createLesson = useCallback(async (payload: LessonCreatePayload) => {
     setCreating(true);
@@ -45,7 +70,6 @@ export function useLessonManager(moduleId: string) {
       if (sig.api_key) formData.append('api_key', sig.api_key);
       if (sig.signature) formData.append('signature', sig.signature);
 
-      // Use upload_url from backend if provided, otherwise fallback to video/upload
       const uploadUrl = (sig as any).upload_url || `https://api.cloudinary.com/v1_1/${sig.cloud_name}/video/upload`;
 
       Object.keys(sig).forEach(key => {
@@ -57,46 +81,23 @@ export function useLessonManager(moduleId: string) {
         }
       });
 
-      const cloudRes = await fetch(uploadUrl, {
-        method: 'POST', 
-        body: formData 
-      });
-      
-      if (!cloudRes.ok) {
-        const errorData = await cloudRes.json();
-        throw new Error(errorData.error?.message || 'Upload to Cloudinary failed');
-      }
+      const cloudRes = await fetch(uploadUrl, { method: 'POST', body: formData });
+      if (!cloudRes.ok) throw new Error('Upload to Cloudinary failed');
       
       const cloudData = await cloudRes.json();
-      
-      // 1. Confirm with backend
       let videoRecord = await courseService.confirmVideoUpload(lessonId, cloudData.public_id);
       
-      // 2. Polling Loop
       let attempts = 0;
       while (videoRecord.status === 'processing' || videoRecord.duration_seconds === 0) {
-        if (attempts >= 10) { 
-          alert('Video uploaded, but Cloudinary is taking a long time to process. Please check back later.');
-          break;
-        }
-        
-        console.log(`Processing... retry ${attempts + 1}/10`);
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3s
-        
+        if (attempts >= 10) break;
+        await new Promise(resolve => setTimeout(resolve, 3000));
         try {
           videoRecord = await courseService.retryVideoProcessing(videoRecord.id);
-        } catch (err) {
-          // Backend returns 409 if still processing; we ignore and let the loop continue
-        }
+        } catch { /* ignore */ }
         attempts++;
       }
 
-      if (videoRecord.status === 'ready') {
-        alert('Video uploaded and processed successfully!');
-      }
-
       await fetchLessons();
-      
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Video upload failed.');
     } finally {
@@ -109,10 +110,7 @@ export function useLessonManager(moduleId: string) {
     try {
       const sig = await courseService.getResourceSignature('document');
       
-      const fileNameWithExt = file.name.toLowerCase().endsWith('.pdf') 
-        ? file.name 
-        : `${file.name.replace(/\.[^/.]+$/, '')}.pdf`;
-      
+      const fileNameWithExt = file.name.toLowerCase().endsWith('.pdf') ? file.name : `${file.name}.pdf`;
       const fileToUpload = new File([file], fileNameWithExt, { type: 'application/pdf' });
 
       const formData = new FormData();
@@ -124,28 +122,16 @@ export function useLessonManager(moduleId: string) {
       Object.keys(sig).forEach(key => {
         if (!['signature', 'api_key', 'cloud_name', 'resource_type'].includes(key)) {
           const value = sig[key as keyof typeof sig];
-          if (value !== undefined && value !== null) {
-            formData.append(key, String(value));
-          }
+          if (value !== undefined && value !== null) formData.append(key, String(value));
         }
       });
 
-      const cloudRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${sig.cloud_name}/raw/upload`,
-        { method: 'POST', body: formData }
-      );
-      
-      if (!cloudRes.ok) {
-        const errorData = await cloudRes.json();
-        throw new Error(errorData.error?.message || 'Upload to Cloudinary failed');
-      }
+      const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloud_name}/raw/upload`, { method: 'POST', body: formData });
+      if (!cloudRes.ok) throw new Error('Upload failed');
       
       const cloudData = await cloudRes.json();
-      
       let finalPublicId = cloudData.public_id;
-      if (!finalPublicId.toLowerCase().endsWith('.pdf')) {
-        finalPublicId += '.pdf';
-      }
+      if (!finalPublicId.toLowerCase().endsWith('.pdf')) finalPublicId += '.pdf';
 
       await courseService.confirmResource({
         lesson_id: lessonId,
@@ -154,28 +140,31 @@ export function useLessonManager(moduleId: string) {
         resource_type: 'document', 
       });
       
-      alert('PDF uploaded successfully!');
+      await fetchLessonData(lessonId);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'PDF upload failed.');
     } finally {
       setUploadingPdf(null);
     }
-  }, []);
+  }, [fetchLessonData]);
 
   const createAssignment = useCallback(async (lessonId: string, payload: AssignmentCreatePayload) => {
     setCreatingAssignment(lessonId);
     try {
       await courseService.createAssignment(lessonId, payload);
-      alert('Assignment created successfully!');
+      await fetchLessonData(lessonId);
     } catch (e) {
       alert(e instanceof ApiError ? e.info.message : 'Failed to create assignment.');
     } finally {
       setCreatingAssignment(null);
     }
-  }, []);
+  }, [fetchLessonData]);
 
   return { 
     lessons, 
+    resources,
+    assignments,
+    quizzes,
     loading, 
     error, 
     creating, 

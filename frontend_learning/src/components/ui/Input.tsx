@@ -24,10 +24,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           className={[
-            // Changed to rounded-lg for a rectangular shape
             'block w-full rounded-lg border border-surface-container bg-surface-container-lowest px-5 py-3.5 text-sm font-semibold text-carbon shadow-sm',
             'transition placeholder:text-outline',
-            // Changed focus colors to match the sidebar's active background (primary-container)
+            // Changed from green (accent) to purple (primary-container)
             'focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-primary-container',
             'disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-on-surface-variant',
             error

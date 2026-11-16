@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useLessonAssignments } from '../hooks/useLessonAssignments';
-import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { Textarea } from '../../../components/ui/Textarea';
 import { formatDate } from '../../../utils/formatDate';
@@ -11,44 +10,34 @@ interface AssignmentSectionProps {
 }
 
 export function AssignmentSection({ lessonId, onSubmitted }: AssignmentSectionProps) {
-  const { assignments, submissions, loading, submitting, error, submit } =
-    useLessonAssignments(lessonId);
+  const { assignments, submissions, loading, submitting, submit } = useLessonAssignments(lessonId);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({});
 
-  if (loading) return null;
-  if (assignments.length === 0) return null;
+  if (loading || assignments.length === 0) return null;
 
   async function handleSubmit(assignmentId: string) {
     const text = drafts[assignmentId]?.trim() || '';
     const file = selectedFiles[assignmentId] || null;
-
-    if (!text && !file) {
-      alert('Please write some text or attach a PDF file before submitting.');
-      return;
-    }
-
-    try {
-      await submit(assignmentId, text, file);
-      setActiveId(null);
-      setSelectedFiles((prev) => ({ ...prev, [assignmentId]: null }));
-      onSubmitted?.();
-    } catch {
-      // Error is handled in the hook and displayed in the UI
-    }
+    if (!text && !file) { alert('Please provide text or attach a PDF.'); return; }
+    await submit(assignmentId, text, file);
+    setActiveId(null);
+    setSelectedFiles((prev) => ({ ...prev, [assignmentId]: null }));
+    onSubmitted?.();
   }
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-lg font-semibold text-forest">Assignments ({assignments.length})</h3>
-      
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
+    <div className="space-y-6 pt-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-container text-on-primary-container">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
         </div>
-      )}
-
+        <h3 className="text-2xl font-extrabold text-carbon">Assignments</h3>
+      </div>
+      
       {assignments.map((a) => {
         const sub = submissions[a.id];
         const isGraded = sub?.status === 'graded';
@@ -57,114 +46,143 @@ export function AssignmentSection({ lessonId, onSubmitted }: AssignmentSectionPr
         const file = selectedFiles[a.id];
 
         return (
-          <div key={a.id} className="rounded-xl border border-line bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h4 className="font-bold text-forest">{a.title}</h4>
-                <div className="mt-1 flex flex-wrap gap-2">
-                  <Badge tone="neutral">Max {a.max_score} pts</Badge>
-                  {a.due_at && <Badge tone="warning">Due {formatDate(a.due_at)}</Badge>}
-                  {isGraded && <Badge tone="success">Graded: {sub.score}/{a.max_score}</Badge>}
-                  {isSubmitted && <Badge tone="info">Submitted</Badge>}
+          <div key={a.id} className="overflow-hidden rounded-xl border border-surface-container bg-surface-container-lowest shadow-[0_8px_24px_rgba(18,18,20,0.04)]">
+            
+            {/* Header */}
+            <div className="border-b border-surface-container p-6 sm:p-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h4 className="text-xl font-bold text-carbon">{a.title}</h4>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="rounded-lg bg-surface-container px-3 py-1 text-xs font-bold text-on-surface-variant">
+                      Max {a.max_score} pts
+                    </span>
+                    {a.due_at && (
+                      <span className="rounded-lg bg-tertiary-container px-3 py-1 text-xs font-bold text-on-tertiary-container">
+                        Due {formatDate(a.due_at)}
+                      </span>
+                    )}
+                    {isGraded && (
+                      <span className="rounded-lg bg-secondary-container px-3 py-1 text-xs font-bold text-on-secondary-container">
+                        Graded: {sub.score}/{a.max_score}
+                      </span>
+                    )}
+                    {isSubmitted && (
+                      <span className="rounded-lg bg-primary-container px-3 py-1 text-xs font-bold text-on-primary-container">
+                        Submitted
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+              <p className="mt-4 whitespace-pre-line text-base font-medium leading-relaxed text-on-surface-variant">
+                {a.instructions}
+              </p>
             </div>
 
-            <p className="mt-3 whitespace-pre-line text-sm text-ink-muted">{a.instructions}</p>
-
+            {/* Graded View */}
             {isGraded && (
-              <div className="mt-3 rounded-lg bg-forest-tint p-3">
-                <p className="text-xs font-semibold text-forest">Your submission:</p>
-                <p className="mt-1 whitespace-pre-line text-sm text-ink-muted">
-                  {/* Changed to text_submission */}
-                  {sub.text_submission || '(no text)'}
-                </p>
-                {sub.file_public_id && (
-                  <p className="mt-1 text-xs font-medium text-accent">[File attached]</p>
-                )}
-                <p className="mt-3 text-xs font-semibold text-forest">Feedback:</p>
-                <p className="mt-1 whitespace-pre-line text-sm text-ink-muted">
-                  {sub.feedback || '(no feedback)'}
-                </p>
+              <div className="bg-secondary-container/20 p-6 sm:p-8">
+                <div className="rounded-xl bg-surface-container-lowest p-6 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-wider text-outline">Your Submission</p>
+                  <p className="mt-2 whitespace-pre-line text-sm font-medium text-carbon">
+                    {sub.text || sub.text_submission || '(no text provided)'}
+                  </p>
+                  
+                  <div className="mt-6 border-t border-surface-container pt-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-outline">Instructor Feedback</p>
+                    <p className="mt-2 whitespace-pre-line text-sm font-extrabold text-secondary">
+                      {sub.feedback || 'No feedback provided.'}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
+            {/* Submitted View (Not Graded) */}
             {isSubmitted && !isEditing && (
-              <div className="mt-3 rounded-lg bg-forest-tint p-3">
-                <p className="text-xs font-semibold text-forest">Your submission:</p>
-                <p className="mt-1 whitespace-pre-line text-sm text-ink-muted">
-                  {/* Changed to text_submission */}
-                  {sub.text_submission || '(no text)'}
-                </p>
-                {sub.file_public_id && (
-                  <p className="mt-1 text-xs font-medium text-accent">[File attached]</p>
-                )}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="mt-3"
-                  onClick={() => {
-                    setActiveId(a.id);
-                    // Changed to text_submission
-                    setDrafts({ ...drafts, [a.id]: sub.text_submission || '' });
-                  }}
-                >
-                  Edit submission
-                </Button>
+              <div className="bg-primary-container/10 p-6 sm:p-8">
+                <div className="rounded-xl bg-surface-container-lowest p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-wider text-outline">Your Submission</p>
+                    <Button 
+                      variant="secondary" 
+                      size="sm" 
+                      className="rounded-lg bg-surface-container text-carbon hover:bg-surface-container-high h-8 px-4 text-xs" 
+                      onClick={() => { setActiveId(a.id); setDrafts({ ...drafts, [a.id]: sub.text || sub.text_submission || '' }); }}
+                    >
+                      Edit Submission
+                    </Button>
+                  </div>
+                  <p className="mt-3 whitespace-pre-line text-sm font-medium text-carbon">
+                    {sub.text || sub.text_submission || '(no text provided)'}
+                  </p>
+                </div>
               </div>
             )}
 
+            {/* Editing/Submitting View */}
             {isEditing && (
-              <div className="mt-3 space-y-3">
-                <Textarea
-                  label="Your answer (optional if submitting a file)"
-                  value={drafts[a.id] || ''}
-                  onChange={(e) => setDrafts({ ...drafts, [a.id]: e.target.value })}
-                  rows={4}
-                  placeholder="Write your answer here…"
+              <div className="space-y-6 p-6 sm:p-8">
+                <Textarea 
+                  label="Your Answer" 
+                  value={drafts[a.id] || ''} 
+                  onChange={(e) => setDrafts({ ...drafts, [a.id]: e.target.value })} 
+                  rows={5} 
+                  placeholder="Write your answer here..." 
                 />
                 
+                {/* File Dropzone */}
                 <div>
-                  <label className="block text-sm font-medium text-forest mb-1">
-                    Attach PDF (optional)
+                  <label className="mb-2 block text-sm font-bold text-carbon ml-1">Attach PDF (optional)</label>
+                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-primary-container bg-primary-container/10 py-10 transition hover:bg-primary-container/20">
+                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary-container text-on-primary-container">
+                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-bold text-carbon">
+                      {file ? file.name : 'Click to upload a PDF'}
+                    </span>
+                    <input 
+                      type="file" 
+                      accept=".pdf" 
+                      onChange={(e) => setSelectedFiles({ ...selectedFiles, [a.id]: e.target.files?.[0] || null })} 
+                      className="hidden" 
+                    />
                   </label>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={(e) =>
-                      setSelectedFiles({ ...selectedFiles, [a.id]: e.target.files?.[0] || null })
-                    }
-                    className="block w-full text-sm text-ink-muted file:mr-4 file:rounded-lg file:border-0 file:bg-forest-tint file:px-4 file:py-2 file:text-sm file:font-semibold file:text-forest hover:file:bg-forest-tint-strong"
-                  />
-                  {file && <p className="mt-1 text-xs text-accent">Attached: {file.name}</p>}
+                  {file && (
+                    <button 
+                      type="button" 
+                      onClick={() => setSelectedFiles({ ...selectedFiles, [a.id]: null })}
+                      className="mt-3 text-xs font-bold text-error hover:underline"
+                    >
+                      Remove attached file
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="ghost" size="sm" onClick={() => setActiveId(null)}>
+                <div className="flex justify-end gap-3 pt-2">
+                  <Button variant="ghost" onClick={() => setActiveId(null)} className="rounded-lg text-on-surface-variant hover:bg-surface-container">
                     Cancel
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleSubmit(a.id)}
-                    disabled={submitting === a.id}
-                  >
-                    {submitting === a.id ? 'Uploading & Submitting…' : 'Submit'}
+                  <Button onClick={() => handleSubmit(a.id)} disabled={submitting === a.id} className="rounded-lg bg-carbon text-white font-extrabold px-8 hover:bg-carbon-light">
+                    {submitting === a.id ? 'Uploading…' : 'Submit Assignment'}
                   </Button>
                 </div>
               </div>
             )}
 
+            {/* Start Submission Button */}
             {!sub && !isEditing && (
-              <Button
-                size="sm"
-                className="mt-3"
-                onClick={() => {
-                  setActiveId(a.id);
-                  setDrafts({ ...drafts, [a.id]: '' });
-                }}
-              >
-                Submit Assignment
-              </Button>
+              <div className="border-t border-surface-container p-6 sm:p-8">
+                <Button 
+                  className="w-full sm:w-auto rounded-lg bg-carbon text-white font-extrabold px-8 py-3.5 hover:bg-carbon-light" 
+                  onClick={() => { setActiveId(a.id); setDrafts({ ...drafts, [a.id]: '' }); }}
+                >
+                  Start Assignment
+                </Button>
+              </div>
             )}
           </div>
         );

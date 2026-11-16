@@ -12,6 +12,8 @@ export interface Course {
   status: string;
   created_at: string;
   updated_at: string;
+  thumbnail_url?: string | null; // <-- ADDED
+
 }
 
 export interface Category {
