@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';
 
-export function Topbar({ isDark = false }: { isDark?: boolean }) {
+export function Topbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -12,23 +12,23 @@ export function Topbar({ isDark = false }: { isDark?: boolean }) {
   }
 
   return (
-    <header className={`sticky top-0 z-20 border-b backdrop-blur-md ${isDark ? 'bg-auth-bg/90 border-white/10' : 'bg-white/95 border-line'}`}>
+    <header className="sticky top-0 z-20 border-b border-surface-container bg-surface/90 backdrop-blur-md">
       <div className="flex items-center justify-between gap-3 px-4 py-4 lg:px-8">
-        <span className={`text-base font-extrabold lg:hidden ${isDark ? 'text-white' : 'text-forest'}`}>
-          CS <span className={isDark ? 'text-pastel-lilac' : 'text-accent'}>Learning</span>
+        <span className="text-base font-extrabold text-carbon lg:hidden">
+          CS <span className="text-primary">Learning</span>
         </span>
 
         <div className="hidden flex-1 lg:block" />
 
         <div className="flex items-center gap-4">
-          <span className={`hidden text-sm font-bold sm:inline ${isDark ? 'text-gray-300' : 'text-ink-muted'}`}>
+          <span className="hidden text-sm font-bold text-on-surface-variant sm:inline">
             {user?.full_name}
           </span>
           <Button 
             variant="ghost" 
             size="sm" 
             onClick={handleLogout} 
-            className={isDark ? 'rounded-full text-gray-300 hover:bg-white/10 hover:text-white' : ''}
+            className="rounded-full text-on-surface-variant hover:bg-surface-container hover:text-carbon"
           >
             Log out
           </Button>

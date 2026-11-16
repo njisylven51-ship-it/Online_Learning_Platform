@@ -9,9 +9,9 @@ interface CategoryFilterProps {
 export function CategoryFilter({ categories, selectedId, onSelect }: CategoryFilterProps) {
   if (categories.length === 0) return null;
   
-  const baseClass = 'rounded-full px-5 py-2 text-sm font-bold transition-colors ring-1';
-  const activeClass = 'bg-pastel-lilac text-forest ring-pastel-lilac';
-  const inactiveClass = 'bg-white/5 text-gray-300 ring-white/10 hover:bg-white/10 hover:text-white';
+  const baseClass = 'rounded-full px-6 py-2.5 text-sm font-bold transition-all ring-1';
+  const activeClass = 'bg-primary-container text-on-primary-container ring-primary-container shadow-[0_4px_12px_rgba(210,189,246,0.3)]';
+  const inactiveClass = 'bg-surface-container text-on-surface-variant ring-transparent hover:bg-surface-container-high hover:text-carbon';
 
   return (
     <div className="flex flex-wrap gap-3">

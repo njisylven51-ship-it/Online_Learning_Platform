@@ -11,7 +11,7 @@ export default function PaymentHistoryPage() {
   if (error) return <ErrorState message={error} onRetry={refetch} />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-8">
       <PageHeader
         title="Payment History"
         subtitle="View your recent transactions and enrollment fees."

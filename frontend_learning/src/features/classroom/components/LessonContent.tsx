@@ -17,7 +17,6 @@ type MediaItem =
   | { kind: 'video'; id: string; label: string; isReady: boolean }
   | { kind: 'youtube'; url: string; label: string; isReady: boolean };
 
-/** Extract a YouTube video ID from any common URL shape. Returns null if it can't. */
 function extractYouTubeId(url: string | null | undefined): string | null {
   if (!url) return null;
   const patterns = [
@@ -26,7 +25,7 @@ function extractYouTubeId(url: string | null | undefined): string | null {
     /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
     /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
     /youtube\.com\/live\/([a-zA-Z0-9_-]{11})/,
-    /^([a-zA-Z0-9_-]{11})$/, // raw ID
+    /^([a-zA-Z0-9_-]{11})$/,
   ];
   for (const re of patterns) {
     const m = url.match(re);
@@ -41,7 +40,6 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
   const [downloading, setDownloading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Include both ready and processing videos in the tabs
   const allVideos = lesson.videos ?? [];
   
   const mediaItems: MediaItem[] = [
@@ -51,15 +49,12 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
       label: allVideos.length > 1 ? `Video ${i + 1}` : 'Video',
       isReady: v.status === 'ready', 
     })),
-    ...(lesson.youtube_url
-      ? [{ kind: 'youtube' as const, url: lesson.youtube_url, label: 'YouTube', isReady: true }]
-      : []),
+    ...(lesson.youtube_url ? [{ kind: 'youtube' as const, url: lesson.youtube_url, label: 'YouTube', isReady: true }] : []),
   ];
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = mediaItems[selectedIndex];
 
-  // Only auto-complete if there is exactly 1 Cloudinary video, or if it's text-only/youtube
   const readyVideos = allVideos.filter(v => v.status === 'ready');
   const shouldAutoComplete = readyVideos.length <= 1;
 
@@ -71,10 +66,7 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
       setIsCompleted(true);
       onCompleted();
     } catch (e: any) {
-      // FIXED: Show the actual backend message instead of a generic error
-      setError(
-        e?.info?.message || 'Failed to mark lesson as complete.'
-      );
+      setError(e?.info?.message || 'Failed to mark lesson as complete.');
     } finally {
       setCompleting(false);
     }
@@ -85,25 +77,16 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
       alert('Download URL is missing. Please refresh the page.');
       return;
     }
-
     setDownloading(resource.id);
     try {
-      if (onRefreshResources) {
-        await onRefreshResources();
-      }
-
+      if (onRefreshResources) await onRefreshResources();
       const res = await fetch(resource.download_url);
       if (!res.ok) throw new Error(`Failed to fetch file (${res.status})`);
-
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
-
       const a = document.createElement('a');
       a.href = url;
-      a.download = resource.title.toLowerCase().endsWith('.pdf')
-        ? resource.title
-        : `${resource.title}.pdf`;
-      
+      a.download = resource.title.toLowerCase().endsWith('.pdf') ? resource.title : `${resource.title}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -116,28 +99,26 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
     }
   }
 
-  const pdfs = resources.filter(r =>
-    r.resource_type === 'document' || r.mime_type === 'application/pdf'
-  );
+  const pdfs = resources.filter(r => r.resource_type === 'document' || r.mime_type === 'application/pdf');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-forest">{lesson.title}</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-carbon">{lesson.title}</h1>
         
         {mediaItems.length > 1 && (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-6 flex flex-wrap gap-3">
             {mediaItems.map((item, i) => (
               <button
                 key={i}
                 type="button"
                 onClick={() => setSelectedIndex(i)}
                 className={[
-                  'rounded-lg px-4 py-1.5 text-sm font-medium transition',
+                  'rounded-full px-5 py-2 text-sm font-bold transition-all border',
                   selectedIndex === i
-                    ? 'bg-accent text-forest shadow-sm'
-                    : 'bg-forest-tint text-forest hover:bg-forest-tint-strong',
-                  !item.isReady && 'opacity-60'
+                    ? 'bg-carbon text-white border-carbon shadow-md'
+                    : 'bg-surface-container text-on-surface-variant border-transparent hover:bg-surface-container-high hover:text-carbon',
+                  !item.isReady && 'opacity-50'
                 ].join(' ')}
               >
                 {item.label} {!item.isReady && '(Processing)'}
@@ -146,101 +127,57 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
           </div>
         )}
 
-        <div className="mt-4">
-          {/* 1. If selected is video AND not ready -> Show spinner */}
+        <div className="mt-6">
           {selected?.kind === 'video' && !selected.isReady && (
-            <div className="flex aspect-video w-full flex-col items-center justify-center rounded-xl border border-line bg-forest-tint text-forest">
-              <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-              <p className="text-sm font-medium">Video is still processing...</p>
-              <p className="mt-1 text-xs text-ink-muted">Cloudinary is finalizing the video. Please check back in a few minutes.</p>
+            <div className="flex aspect-video w-full flex-col items-center justify-center rounded-2xl border border-surface-container bg-surface-container text-carbon">
+              <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              <p className="text-base font-bold">Video is still processing...</p>
             </div>
           )}
 
-          {/* 2. If selected is video AND ready -> Show player */}
           {selected?.kind === 'video' && selected.isReady && (
-            <VideoPlayer 
-              videoId={selected.id} 
-              onComplete={shouldAutoComplete ? markComplete : () => {}} 
-            />
+            <VideoPlayer videoId={selected.id} onComplete={shouldAutoComplete ? markComplete : () => {}} />
           )}
 
-          {/* 3. If selected is YouTube */}
           {selected?.kind === 'youtube' && (() => {
             const ytId = extractYouTubeId(selected.url);
             return ytId ? (
-              <div className="space-y-2">
-                <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
-                  <iframe
-                    src={`https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1`}
-                    title={lesson.title}
-                    className="h-full w-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    referrerPolicy="strict-origin-when-cross-origin"
-                    allowFullScreen
-                  />
+              <div className="space-y-3">
+                <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-carbon ring-1 ring-surface-container">
+                  <iframe src={`https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1`} title={lesson.title} className="h-full w-full" allowFullScreen />
                 </div>
-                <p className="text-xs text-ink-muted">
-                  Can&apos;t play here?{' '}
-                  <a
-                    href={`https://www.youtube.com/watch?v=${ytId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-accent hover:underline"
-                  >
-                    Watch on YouTube ↗
-                  </a>
-                </p>
               </div>
             ) : (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                The YouTube link is invalid. Ask your instructor to check the URL.
+              <div className="rounded-2xl border border-error-container bg-error-container p-4 text-sm font-bold text-on-error-container">
+                The YouTube link is invalid.
               </div>
             );
           })()}
-
-          {/* 4. No media at all */}
-          {!selected && (
-            <div className="rounded-xl border border-dashed border-line bg-forest-tint p-6 text-center text-sm text-ink-muted">
-              No video or YouTube link for this lesson.
-            </div>
-          )}
         </div>
       </div>
 
       {lesson.content && (
-        <div className="prose prose-sm max-w-none text-ink-muted">
+        <div className="prose prose-sm max-w-none text-on-surface-variant text-lg font-medium leading-relaxed">
           <p className="whitespace-pre-line">{lesson.content}</p>
         </div>
       )}
 
       {pdfs.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-forest">
-            Lesson Resources ({pdfs.length})
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <h3 className="text-xl font-extrabold text-carbon">Lesson Resources</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
             {pdfs.map((r) => (
-              <div key={r.id} className="flex items-center justify-between rounded-xl border border-line bg-white p-4 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-forest-tint text-forest">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
+              <div key={r.id} className="flex items-center justify-between rounded-2xl border border-surface-container bg-surface-container-lowest p-5 shadow-sm">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                   </div>
                   <div>
-                    <p className="line-clamp-1 text-sm font-medium text-forest">{r.title}</p>
-                    <p className="text-xs text-ink-muted">
-                      {r.size_bytes ? `${(r.size_bytes / 1024 / 1024).toFixed(2)} MB` : 'PDF Document'}
-                    </p>
+                    <p className="line-clamp-1 text-sm font-bold text-carbon">{r.title}</p>
+                    <p className="text-xs font-bold text-on-surface-variant">{r.size_bytes ? `${(r.size_bytes / 1024 / 1024).toFixed(2)} MB` : 'PDF Document'}</p>
                   </div>
                 </div>
-                
-                <button
-                  type="button"
-                  onClick={() => handleDownload(r)}
-                  disabled={downloading === r.id}
-                  className="ml-4 shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-forest transition hover:bg-accent-hover disabled:opacity-50"
-                >
+                <button onClick={() => handleDownload(r)} disabled={downloading === r.id} className="ml-4 shrink-0 rounded-full bg-carbon px-4 py-2 text-xs font-extrabold text-white transition hover:bg-carbon-light disabled:opacity-50">
                   {downloading === r.id ? '...' : 'Download'}
                 </button>
               </div>
@@ -249,32 +186,19 @@ export function LessonContent({ lesson, resources, onCompleted, onRefreshResourc
         </div>
       )}
 
-      {/* Assignments & Quizzes */}
-      <AssignmentSection 
-        lessonId={lesson.id} 
-        onSubmitted={() => setError(null)} 
-      />
+      <AssignmentSection lessonId={lesson.id} onSubmitted={() => setError(null)} />
+      <QuizSection lessonId={lesson.id} onQuizPassed={() => setError(null)} />
 
-      <QuizSection 
-        lessonId={lesson.id} 
-        onQuizPassed={() => setError(null)} 
-      />
-
-      {/* Completion */}
-      <div className="flex flex-col items-end gap-3 border-t border-line pt-6">
-        {error && (
-          <div className="w-full rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+      <div className="flex flex-col items-end gap-4 border-t border-surface-container pt-8">
+        {error && <div className="w-full rounded-xl border border-error-container bg-error-container p-4 text-sm font-bold text-on-error-container">{error}</div>}
         
         {isCompleted ? (
-          <span className="flex items-center gap-2 text-sm font-medium text-accent">
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          <span className="flex items-center gap-2 text-base font-extrabold text-secondary">
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
             Lesson Completed
           </span>
         ) : (
-          <Button onClick={markComplete} disabled={completing}>
+          <Button onClick={markComplete} disabled={completing} className="rounded-full bg-carbon text-white font-extrabold text-base px-8 py-3.5 hover:bg-carbon-light">
             {completing ? 'Saving…' : 'Mark as Complete'}
           </Button>
         )}

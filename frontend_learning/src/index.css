@@ -1,8 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  /* Existing Brand Colors */
+  /* ========================================================= */
+  /* EXISTING BRAND COLORS (Do not remove - keeps current UI)  */
+  /* ========================================================= */
   --color-forest: #1f3d33;
   --color-forest-soft: #2a4d40;
   --color-forest-tint: #f5f9f7;
@@ -16,33 +18,80 @@
   --color-ink-subtle: #6b7280;
   --color-line: #e4ebe7;
 
-  /* Softer Charcoal Background */
+  /* Existing Dark Mode Auth Tokens */
   --color-auth-bg: #1E1E24; 
   
-  /* Lilac */
-  --color-pastel-lilac: #DAB6FF; 
+  /* UPDATED: Using your specific Lilac */
+  --color-pastel-lilac: #D2BDF6; 
   
   --color-pastel-mint: #9EE8A1; 
   --color-pastel-yellow: #FFEBB7;
   --color-pastel-pink: #FFD1D1;
+
+  /* ========================================================= */
+  /* NEW PASTEL PLAYFUL SOCIAL EDTECH TOKENS (Added for new UI)*/
+  /* ========================================================= */
+  /* Surfaces */
+  --color-surface: #fcf8fb;
+  --color-surface-container: #f0edef;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-surface: #1b1b1d;
+  --color-on-surface-variant: #49454e;
+  --color-outline: #7a757f;
+
+  /* Primary (Lilac) */
+  --color-primary: #685588;
+  /* UPDATED: Using your specific Lilac */
+  --color-primary-container: #D2BDF6;
+  --color-on-primary-container: #604e80;
+  
+  /* Secondary (Mint) */
+  --color-secondary: #39684b;
+  --color-secondary-container: #b8ecc7;
+  --color-on-secondary-container: #3d6c4f;
+  
+  /* Tertiary (Butter Yellow) */
+  --color-tertiary: #705d07;
+  --color-tertiary-container: #e6cc70;
+  --color-on-tertiary-container: #675500;
+
+  /* Deep Carbon (High Contrast) */
+  --color-carbon: #121214;
+  --color-carbon-light: #18181b;
+
+  /* Error */
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
 }
 
 @layer base {
   html {
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
+  
+  /* Existing Nunito class for auth pages */
   .auth-font {
     font-family: 'Nunito', sans-serif;
   }
+
+  /* NEW: Plus Jakarta Sans class for the new student pages */
+  .jakarta-font {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
   body {
     @apply bg-white text-ink antialiased;
   }
+  
   h1, h2, h3, h4 {
     @apply text-forest;
   }
+  
   *, *::before, *::after {
     box-sizing: border-box;
   }
+  
   ::selection {
     @apply bg-accent-tint text-forest;
   }

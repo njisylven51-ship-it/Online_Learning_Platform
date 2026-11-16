@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useCourseDetails } from '../../courses/hooks/useCourseDetails';
-import { useMyEnrolments } from '../../enrolments/hooks/useMyEnrolments'; // <-- Ensure this is imported
+import { useMyEnrolments } from '../../enrolments/hooks/useMyEnrolments';
 import { useCreatePayment } from '../hooks/useCreatePayment';
 import { useVerifyPayment } from '../hooks/useVerifyPayment';
 import { SimulatorBanner } from '../components/SimulatorBanner';
@@ -19,8 +19,6 @@ export default function PaymentCheckout() {
   const navigate = useNavigate();
   
   const { data: course, loading: courseLoading, error: courseError } = useCourseDetails(courseId);
-  
-  // Get the refetch function for enrolments
   const { data: myEnrolments, loading: enrolmentsLoading, refetch: refetchEnrolments } = useMyEnrolments();
   
   const { create, loading: creating, error: createError } = useCreatePayment();
@@ -50,7 +48,7 @@ export default function PaymentCheckout() {
           description="You already have access to this course."
           action={
             <Link to={`/student/classroom/${courseId}`}>
-              <Button>Go to Classroom</Button>
+              <Button className="rounded-full bg-carbon text-white hover:bg-carbon-light px-8 py-3">Go to Classroom</Button>
             </Link>
           }
         />
@@ -73,7 +71,6 @@ export default function PaymentCheckout() {
       setStatus(verified.status);
       
       if (verified.status === 'succeeded') {
-        // 🚨 CRITICAL FIX: Tell the frontend to re-fetch enrolments from the backend
         await refetchEnrolments(); 
       }
     } catch (e) {
@@ -91,44 +88,59 @@ export default function PaymentCheckout() {
   const isProcessing = creating || verifying;
 
   return (
-    <div className="mx-auto max-w-lg space-y-6 py-8">
-      <Link to={`/courses/${course.id}`} className="text-sm font-medium text-accent hover:underline">
-        ← Back to course
+    // Increased to max-w-7xl to fill the full dashboard width, with extra spacing
+    <div className="mx-auto max-w-7xl space-y-8 py-8">
+      
+      <Link to={`/student/courses/${course.id}`} className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:text-on-primary-container transition">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+        Back to course
       </Link>
 
-      <div className="rounded-xl border border-line bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-forest">Checkout</h1>
-        <p className="mt-1 text-sm text-ink-muted">{course.title}</p>
-        <p className="mt-4 text-3xl font-black text-forest">
-          {formatCurrency(course.price_xaf)}
-        </p>
+      {/* Two-column layout spanning the whole screen */}
+      <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-12">
+        
+        {/* Left Column: Order Summary & Simulator */}
+        <div className="space-y-6">
+          <div className="rounded-[2rem] border border-surface-container bg-surface-container-lowest p-10 shadow-[0_8px_24px_rgba(18,18,20,0.04)]">
+            <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Checkout</p>
+            <h1 className="mt-2 text-3xl font-extrabold text-carbon">{course.title}</h1>
+            <div className="mt-8 flex items-baseline gap-2">
+              <p className="text-6xl font-black text-primary">{formatCurrency(course.price_xaf)}</p>
+            </div>
+          </div>
+
+          <SimulatorBanner />
+        </div>
+
+        {/* Right Column: Payment Form or Status */}
+        <div className="space-y-6">
+          {error && (
+            <div className=" border border-error-container bg-error-container/30 p-4 text-sm font-bold text-on-error-container">
+              {error}
+            </div>
+          )}
+
+          {status === 'pending' ? (
+            <PaymentStatusDisplay status="pending" onRetry={handleReset} onGoToCourse={() => {}} />
+          ) : status === 'succeeded' ? (
+            <PaymentStatusDisplay
+              status="succeeded"
+              onRetry={handleReset}
+              onGoToCourse={() => navigate(`/student/classroom/${course.id}`)}
+            />
+          ) : status === 'failed' ? (
+            <PaymentStatusDisplay status="failed" onRetry={handleReset} onGoToCourse={() => {}} />
+          ) : (
+            <div className="rounded-[1rem] border border-surface-container bg-surface-container-lowest p-10 shadow-[0_8px_24px_rgba(18,18,20,0.04)]">
+              <h2 className="mb-8 text-2xl font-extrabold text-carbon">Payment Details</h2>
+              <PaymentForm onSubmit={handleSubmit} loading={isProcessing} />
+              {createError && <p className="mt-3 text-sm font-bold text-error">{createError}</p>}
+              {verifyError && <p className="mt-3 text-sm font-bold text-error">{verifyError}</p>}
+            </div>
+          )}
+        </div>
+
       </div>
-
-      <SimulatorBanner />
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {status === 'pending' ? (
-        <PaymentStatusDisplay status="pending" onRetry={handleReset} onGoToCourse={() => {}} />
-      ) : status === 'succeeded' ? (
-        <PaymentStatusDisplay
-          status="succeeded"
-          onRetry={handleReset}
-          onGoToCourse={() => navigate(`/student/classroom/${course.id}`)}
-        />
-      ) : status === 'failed' ? (
-        <PaymentStatusDisplay status="failed" onRetry={handleReset} onGoToCourse={() => {}} />
-      ) : (
-        <div className="rounded-xl border border-line bg-white p-6 shadow-sm">
-          <PaymentForm onSubmit={handleSubmit} loading={isProcessing} />
-          {createError && <p className="mt-2 text-sm text-red-600">{createError}</p>}
-          {verifyError && <p className="mt-2 text-sm text-red-600">{verifyError}</p>}
-        </div>
-      )}
     </div>
   );
 }

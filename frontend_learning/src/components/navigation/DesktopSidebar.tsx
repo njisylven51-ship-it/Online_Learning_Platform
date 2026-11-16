@@ -5,17 +5,16 @@ import type { NavItem } from '../../config/navigation';
 interface DesktopSidebarProps {
   brand: string;
   items: NavItem[];
-  isDark?: boolean;
 }
 
-export function DesktopSidebar({ brand, items, isDark = false }: DesktopSidebarProps) {
+export function DesktopSidebar({ brand, items }: DesktopSidebarProps) {
   return (
-    <aside className={`hidden w-64 shrink-0 flex-col border-r lg:flex ${isDark ? 'bg-auth-bg border-white/10' : 'bg-white border-line'}`}>
-      <div className={`border-b px-6 py-5 ${isDark ? 'border-white/10' : 'border-line'}`}>
-        <span className={`text-xl font-extrabold ${isDark ? 'text-white' : 'text-forest'}`}>
-          CS <span className={isDark ? 'text-pastel-lilac' : 'text-accent'}>Learning</span>
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-surface-container bg-surface-container-lowest lg:flex">
+      <div className="border-b border-surface-container px-6 py-6">
+        <span className="text-xl font-extrabold tracking-tight text-carbon">
+          CS <span className="text-primary">Learning</span>
         </span>
-        <p className={`mt-1 text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-ink-subtle'}`}>
+        <p className="mt-1 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
           {brand}
         </p>
       </div>
@@ -28,10 +27,11 @@ export function DesktopSidebar({ brand, items, isDark = false }: DesktopSidebarP
                 end={item.end}
                 className={({ isActive }) =>
                   [
-                    'group flex items-center gap-3 rounded-full px-4 py-3 text-sm font-bold transition-all',
+                    // Changed from rounded-full to rounded-lg
+                    'group flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-bold transition-all',
                     isActive
-                      ? (isDark ? 'bg-pastel-lilac text-forest shadow-md' : 'bg-accent-tint text-forest')
-                      : (isDark ? 'text-gray-400 hover:bg-white/5 hover:text-white' : 'text-ink-muted hover:bg-forest-tint hover:text-forest'),
+                      ? 'bg-primary-container text-on-primary-container shadow-[0_4px_12px_rgba(210,189,246,0.3)]' 
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-carbon',
                   ].join(' ')
                 }
               >
@@ -41,9 +41,7 @@ export function DesktopSidebar({ brand, items, isDark = false }: DesktopSidebarP
                       name={item.icon}
                       className={[
                         'h-5 w-5 shrink-0 transition-colors',
-                        isActive 
-                          ? (isDark ? 'text-forest' : 'text-accent') 
-                          : (isDark ? 'text-gray-500 group-hover:text-white' : 'text-ink-subtle group-hover:text-forest'),
+                        isActive ? 'text-on-primary-container' : 'text-outline group-hover:text-carbon',
                       ].join(' ')}
                     />
                     <span>{item.label}</span>

@@ -6,7 +6,7 @@ import type { Course } from '../types';
 interface CourseCardProps {
   course: Course;
   categoryName?: string;
-  basePath?: string; 
+  basePath?: string;
 }
 
 const LEVEL_LABEL: Record<string, string> = {
@@ -21,39 +21,72 @@ export function CourseCard({ course, categoryName, basePath }: CourseCardProps) 
   const initials = (course.slug || course.title || 'CO').slice(0, 2).toUpperCase();
 
   return (
-    <Link to={`${resolvedBasePath}/${course.id}`} className="group block h-full">
-      <div className="flex h-full flex-col overflow-hidden rounded-3xl bg-white/5 ring-1 ring-white/10 transition duration-300 group-hover:-translate-y-1 group-hover:bg-white/10 group-hover:ring-white/20 group-hover:shadow-2xl group-hover:shadow-pastel-lilac/10">
-        {/* Thumbnail */}
-        <div className="relative flex aspect-[4/3] items-center justify-center bg-auth-bg p-6">
-          <span className="text-5xl font-black tracking-widest text-white/5">
+    <Link
+      to={`${resolvedBasePath}/${course.id}`}
+      className="group block h-full focus:outline-none"
+    >
+      <article className="relative flex h-full flex-col overflow-hidden rounded-[24px] border border-surface-container bg-surface-container-lowest shadow-[0_8px_24px_rgba(18,18,20,0.04)] transition-all duration-300 ease-out hover:-translate-y-1.5 hover:border-primary/30 hover:shadow-[0_12px_30px_rgba(210,189,246,0.45)] group-focus-visible:ring-2 group-focus-visible:ring-primary">
+        {/* Thumbnail Header */}
+        <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden bg-surface-container p-6">
+          {/* Subtle decorative radial glow & concentric rings using existing tokens */}
+          <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full border border-outline/10 transition-transform duration-500 group-hover:scale-125" />
+          <div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full bg-surface-container-lowest/40 transition-transform duration-500 group-hover:scale-110" />
+
+          {/* Monogram */}
+          <span className="select-none text-6xl font-black tracking-widest text-outline/20 transition-all duration-300 group-hover:scale-110 group-hover:text-primary/25">
             {initials}
           </span>
+
+          {/* Top-left Category Badge */}
           {categoryName && (
-            <span className="absolute left-5 top-5 rounded-full bg-pastel-mint px-3 py-1 text-xs font-extrabold text-forest">
+            <span className="absolute left-4 top-4 rounded-full bg-secondary-container px-3.5 py-1 text-[11px] font-extrabold tracking-wide text-on-secondary-container shadow-sm">
               {categoryName}
             </span>
           )}
+
+          {/* Bottom-right Level Pill */}
+          <span className="absolute bottom-3.5 right-4 inline-flex items-center gap-1.5 rounded-full bg-surface-container-lowest/90 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary shadow-sm backdrop-blur-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+            {LEVEL_LABEL[course.level] ?? course.level}
+          </span>
         </div>
 
-        {/* Content */}
+        {/* Content Body */}
         <div className="flex flex-1 flex-col p-6">
-          <div className="mb-2 text-xs font-bold uppercase tracking-wider text-pastel-lilac">
-            {LEVEL_LABEL[course.level] ?? course.level}
-          </div>
-          <h3 className="line-clamp-2 text-lg font-bold leading-snug text-white transition-colors group-hover:text-pastel-mint">
+          <h3 className="line-clamp-2 text-[19px] font-extrabold leading-snug tracking-tight text-carbon transition-colors duration-200 group-hover:text-primary">
             {course.title}
           </h3>
-          <p className="mt-2 line-clamp-2 flex-1 text-sm font-semibold text-gray-400">
+
+          <p className="mt-2.5 line-clamp-2 flex-1 text-sm leading-relaxed text-on-surface-variant">
             {course.description}
           </p>
-          <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4">
-            <span className="text-xs font-bold text-gray-400">Enroll now</span>
-            <span className="text-lg font-extrabold text-white">
-              {formatCurrency(course.price_xaf)}
+
+          {/* Footer / Price & Interactive CTA */}
+          <div className="mt-6 flex items-center justify-between border-t border-surface-container pt-4">
+            <div className="flex flex-col">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-outline">
+                Tuition
+              </span>
+              <span className="text-lg font-extrabold tracking-tight text-carbon">
+                {formatCurrency(course.price_xaf)}
+              </span>
+            </div>
+
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-container px-4 py-2 text-xs font-bold text-carbon transition-all duration-200 group-hover:bg-primary group-hover:text-surface-container-lowest">
+              <span>Enroll now</span>
+              <svg
+                className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+              </svg>
             </span>
           </div>
         </div>
-      </div>
+      </article>
     </Link>
   );
 }

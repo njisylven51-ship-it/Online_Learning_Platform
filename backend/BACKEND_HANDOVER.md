@@ -117,6 +117,10 @@ Authentication notation: **Public** means no current-user dependency; **Bearer**
 | Method | Endpoint | Purpose; auth | Request → response | Implementation |
 |---|---|---|---|---|
 | GET | `/api/v1/courses/categories` | Active categories; Public | none → category list | `courses.categories` |
+| POST | `/api/v1/courses/upload-signature` | Sign direct course-thumbnail upload; Approved teacher/admin | none → existing Cloudinary signature payload for `course_thumbnail` purpose | `courses.thumbnail_upload_signature` |
+| PUT | `/api/v1/courses/{course_id}/thumbnail` | Confirm or replace thumbnail; course owner/admin | `{public_id}` → `{thumbnail_url}` | `courses.set_course_thumbnail` → `course_service.confirm_course_thumbnail` |
+| DELETE | `/api/v1/courses/{course_id}/thumbnail` | Delete thumbnail; course owner/admin | none → 204 | `courses.delete_course_thumbnail` → `course_service.remove_course_thumbnail` |
+| GET | `/api/v1/courses/{course_id}/thumbnail` | Read signed thumbnail URL; public for published courses, owner/admin for unpublished courses | none → `{thumbnail_url}`; 404 if absent or hidden | `courses.get_course_thumbnail` → `thumbnail_url_for` |
 | GET | `/api/v1/courses` | Published course catalog with `q`, `category_id`, `limit` (1–100), `offset` | query → `CourseRead[]` | `courses.list_courses` |
 | GET | `/api/v1/courses/{course_id}` | Published course detail; Public | path UUID → `CourseRead` | `courses.course_detail` |
 | GET | `/api/v1/courses/mine` | Owned courses; Approved teacher/admin | none → `CourseRead[]` | `courses.my_courses` |
@@ -133,7 +137,7 @@ Authentication notation: **Public** means no current-user dependency; **Bearer**
 | PATCH | `/api/v1/lessons/{lesson_id}` | Update lesson; owner/admin | `LessonCreate` → `LessonRead` | `lessons.update_lesson` |
 | GET | `/api/v1/lessons/{lesson_id}` | Read lesson content; Bearer with preview/enrolment/owner rules | none → `LessonRead` | `lessons.get_lesson` → `ensure_lesson_access` |
 
-`CourseCreate` fields: title, slug, description, optional category UUID, level, `price_xaf`. `ModuleCreate`: title, description, position. `LessonCreate`: title, content, optional YouTube URL, duration, position, preview flag. Several mutation routes accept the same complete schema on PATCH, so they behave as full field assignments rather than sparse patch schemas.
+`CourseCreate` fields: title, slug, description, optional category UUID, level, `price_xaf`. `CourseRead` adds `id`, `instructor_id`, `status`, and the computed `thumbnail_url` (nullable); this URL is freshly signed at read time and is not stored on the Course row. The catalog, course detail, `/mine`, and admin course-list handlers load the separate thumbnail relationship and populate that field. `ModuleCreate`: title, description, position. `LessonCreate`: title, content, optional YouTube URL, duration, position, preview flag. Several mutation routes accept the same complete schema on PATCH, so they behave as full field assignments rather than sparse patch schemas.
 
 ### Enrolment and payments (`enrolments.py`, `payments.py`)
 
@@ -158,7 +162,7 @@ Authentication notation: **Public** means no current-user dependency; **Bearer**
 | GET | `/api/v1/teacher/dashboard` | Teacher metrics; Approved teacher/admin | none → course/student/pending review counts | `teacher.dashboard` |
 | GET | `/api/v1/admin/users` | Recent users; Admin | optional `limit`, `offset` → `UserRead[]` | `admin.users` |
 | GET | `/api/v1/admin/dashboard` | Aggregate counts; Admin | none → users/pending course/active enrolment/pending payment counts | `admin.dashboard` |
-| GET | `/api/v1/admin/courses` | Course list with optional status filter; Admin | query → Course[] | `admin.courses` |
+| GET | `/api/v1/admin/courses` | Course list with optional status filter; Admin | query → `CourseRead[]`, including computed `thumbnail_url` | `admin.courses` |
 | PATCH | `/api/v1/admin/users/{user_id}/status` | Activate/deactivate user; Admin | query `active` → `{active}` | `admin.set_user_status`, audit entry |
 | POST | `/api/v1/admin/categories` | Create category; Admin | `CategoryInput` (name, slug, description) → Category | `admin.create_category` |
 | GET | `/api/v1/admin/audit-logs` | Recent audit records; Admin | optional limit → AuditLog[] | `admin.audit_logs` |
@@ -228,7 +232,8 @@ All primary keys are UUIDs generated in Python unless indicated. Most timestamps
 | `User` (`models/user.py`) | id, unique indexed email, full_name, password_hash, role, is_active, password_changed_at, created/updated; relationships to courses, enrolments, payments, certificates, progress, notifications, optional instructor profile | Identity and ownership |
 | `Instructor` (`instructor.py`) | id, unique user_id FK, bio, qualifications, status, review reason, reviewer FK, review timestamp; user relationship | Teacher application/moderation |
 | `Category` (`category.py`) | id, unique indexed name/slug, description, is_active; courses relationship | Course catalog taxonomy |
-| `Course` (`course.py`) | id, instructor FK, optional category FK, title, unique indexed slug, description, level, nonnegative XAF price, status, rejection reason, timestamps; instructor/category/modules/enrolments/payments/certificates relationships | Course lifecycle |
+| `Course` (`course.py`) | id, instructor FK, optional category FK, title, unique indexed slug, description, level, nonnegative XAF price, status, rejection reason, timestamps; instructor/category/modules/enrolments/payments/certificates relationships plus a one-to-one thumbnail relationship (no thumbnail column on this table) | Course lifecycle |
+| `CourseThumbnail` (`course_thumbnail.py`) | id, unique indexed `course_id` FK, Cloudinary `public_id`, format, byte size, status, UTC creation time; back-reference to Course | Course thumbnail metadata; provider asset identifier only, no persisted delivery URL or image bytes |
 | `Module` (`module.py`) | id, course FK, title, description, position; course/lessons relationships | Course structure |
 | `Lesson` (`lesson.py`) | id, module FK, title, content, optional YouTube URL, nonnegative duration/position, preview flag; module/resources/videos/quizzes/assignments/progress relationships | Lesson content |
 | `Resource` (`resource.py`) | id, lesson and uploader FKs, title/type, Cloudinary public id/secure URL, MIME, size, status, creation time; lesson relationship | PDF/image lesson attachments |
@@ -291,7 +296,7 @@ Roles observed in code are `student`, `teacher`, and `administrator`. `require_r
 |---|---|
 | Account/auth | `api/v1/auth.py`, `services/auth_service.py`, `core/security.py`: student/teacher signup, login, profile, password reset/change, JWT enforcement. |
 | Teacher applications | `models/instructor.py`, `api/v1/instructors.py`, `services/instructor_service.py`: pending/approved/rejected states; admin review records actor/time/reason and audit log; teachers can log in while pending/rejected but cannot author. |
-| Course catalog and moderation | `api/v1/courses.py`, `services/course_service.py`: public published catalog, search/category filters, teacher-owned course CRUD, draft→pending review→published/rejected, archive. Updating a published course returns it to draft. Admin course review sends notification and writes an audit row. |
+| Course catalog, thumbnails, and moderation | `api/v1/courses.py`, `services/course_service.py`, `models/course_thumbnail.py`: public published catalog, search/category filters, teacher-owned course CRUD, separate-table Cloudinary thumbnail confirm/replace/delete, freshly signed thumbnail URLs, and draft→pending review→published/rejected/archive workflow. Thumbnail changes do not alter course status. Updating course fields on a published course returns it to draft. Admin course review sends notification and writes an audit row. |
 | Curriculum | `api/v1/modules.py`, `api/v1/lessons.py`: position-ordered module/lesson management, preview lesson policy, owner checks. |
 | Enrolment | `services/enrolment_service.py`: free published courses enroll directly; paid courses reject free enrollment; existing inactive record is reactivated. Payment verification also creates/reactivates enrollment. |
 | Payments | `services/payment_service.py` and integration adapters: simulator can verify allowlisted test numbers only in development/test; successful verified payment grants active enrollment. Real MTN/Orange not implemented end-to-end. See Section 9. |
@@ -319,7 +324,7 @@ Payment risks/status: payment success and enrollment are committed in one sessio
 
 ## 10. File uploads and storage
 
-`services/cloudinary_service.py` maps upload purposes (`video`, resource image/document, assignment, plus course thumbnail/profile/lesson image purposes) to server-controlled subfolders and resource types. Signatures are created with authenticated delivery type. Fixed-folder mode uses Cloudinary `folder`; dynamic mode sends `asset_folder` and `public_id_prefix`. Configuration validates folder syntax, asset public ID prefix, and, for dynamic mode, provider-reported folder. Confirmation checks format and configured byte size before storing metadata. Signed delivery defaults to 300 seconds.
+`services/cloudinary_service.py` maps upload purposes (`video`, resource image/document, assignment, course thumbnail, profile, and lesson image) to server-controlled subfolders and resource types. Course thumbnails use the `course_thumbnail` purpose under the `courses/{uploader_id}` subfolder. Signatures are created with authenticated delivery type. Fixed-folder mode uses Cloudinary `folder`; dynamic mode sends `asset_folder` and `public_id_prefix`. Configuration validates folder syntax, asset public ID prefix, and, for dynamic mode, provider-reported folder. Thumbnail confirmation re-fetches provider metadata, verifies image resource type, JPG/JPEG/PNG/WebP format, configured image-size limit, and purpose folder scope before upserting the `course_thumbnail` row. Replacing/deleting a thumbnail deletes the prior provider asset. Thumbnail delivery is generated locally with the same short-lived (300-second) signed-download helper used by video playback; signed URLs are not persisted.
 
 Supported endpoint upload types currently include videos (`mp4`, `webm`, `mov`, `m4v`), resource images (`jpg`, `jpeg`, `png`, `webp`), and documents/assignment files (PDF/raw format). Video/resource data is uploaded by the frontend directly to Cloudinary; `secure_url` is stored but protected playback/resource endpoints return a newly signed delivery URL. Provider operations fail with HTTP errors when Cloudinary is unconfigured or operations fail.
 
@@ -427,9 +432,9 @@ No frontend source was inspected for this task, so compatibility with current cl
 
 ## 19. Testing
 
-The test suite uses pytest and FastAPI `TestClient` (`httpx`). `tests/conftest.py` defaults `DATABASE_URL` to `/tmp/learning-platform-tests.db`, sets test secret/environment before importing app, disables email, and drops/recreates SQLModel tables around tests. Existing tests cover auth/signup, course permissions, free enrollment/payment separation, simulated payments and tamper checks, quiz answer privacy/attempt cap, teacher review/ownership, Cloudinary upload signing/scope, and video auth/processing state.
+The test suite uses pytest and FastAPI `TestClient` (`httpx`). `tests/conftest.py` defaults `DATABASE_URL` to `/tmp/learning-platform-tests.db`, sets test secret/environment before importing app, disables email, and drops/recreates SQLModel tables around tests. Tests cover auth/signup, course permissions and thumbnail behavior, free enrollment/payment separation, simulated payments and tamper checks, quiz answer privacy/attempt cap, teacher review/ownership, Cloudinary upload signing/scope, and video auth/processing state. `tests/test_course_thumbnails.py` covers thumbnail table registration/no Course columns, upload authorization, asset format/size/scope validation, owner checks, replacement/deletion, signed course responses, and draft-course visibility.
 
-There are no explicit test files for certificates, assignments, notifications, resources route behavior, password reset/change, broad admin operations, or real provider adapters. No coverage configuration or recorded coverage report was found. Tests were not run during this documentation task, so pass status is unverified.
+There are no explicit test files for certificates, assignments, notifications, resources route behavior, password reset/change, broad admin operations, or real provider adapters. No coverage configuration or recorded coverage report was found. The isolated thumbnail-table registration test passed (1 passed). The thumbnail route test module was attempted, but its shared `TestClient` fixture stalled while entering application startup in this environment, so route-level pass status remains unverified. This handover update did not rerun tests.
 
 From `backend/`, after installing the listed requirements and configuring dependencies, the existing suite is invoked with `pytest`. Test fixture defaults may only apply before importing the app; overriding `DATABASE_URL` should likewise occur before app import. Avoid pointing tests at a non-test database because fixture drops all mapped tables.
 
@@ -467,11 +472,11 @@ No Dockerfile, compose file, Procfile, platform manifest, production Uvicorn/Gun
 |---|---|---|
 | Student auth/JWT | Implemented | Signup/login/current user/password update and JWT dependencies exist. |
 | Teacher applications and admin review | Implemented | Pending/approved/rejected flow, audit and tests present. |
-| Course/curriculum authoring and review | Implemented | Routers, models and ownership/status transitions exist. |
+| Course/curriculum authoring and review | Implemented | Routers, models and ownership/status transitions exist. Course thumbnails use a separate registered table; signed upload/confirmation, owner-controlled replacement/deletion, and signed URLs on course read responses are implemented. Course table has no thumbnail columns. |
 | Student enrolment | Implemented | Free course service and verified simulated paid flow. |
 | Payment simulator | Mocked | Deterministic development/test adapter and guarded verify endpoint. |
 | Real MTN/Orange payment | Incomplete | Adapter classes are explicit 501 boundaries; callback does not verify. |
-| Cloudinary uploads/playback/resources | Implemented, external config dependent | Signature, metadata confirmation and signed delivery logic exists; account/runtime not verified. |
+| Cloudinary uploads/playback/resources/thumbnails | Implemented, external config dependent | Signature, metadata confirmation, separate thumbnail persistence, owner/scope checks, replacement/deletion and signed delivery logic exist; account/runtime not verified. |
 | Quizzes and grading | Implemented | Creation/publish/attempt caps/scoring service exists. |
 | Assignments and grading | Implemented | Submission, ownership grading and Cloudinary file flow exist; due time not enforced. |
 | Lesson/video progress | Partially implemented | Progress and completion gates exist; video watch time is inferred from client position/time and includes end-position shortcut. |
@@ -481,7 +486,7 @@ No Dockerfile, compose file, Procfile, platform manifest, production Uvicorn/Gun
 | Alembic migrations | Not found | No migration dependency/configuration/history. |
 | Background processing/WebSockets | Not found | No worker or realtime endpoint found. |
 | Production deployment config | Not found | No container/hosting manifest found. |
-| Test coverage | Partially implemented | Feature tests exist but many modules lack direct coverage; tests not run here. |
+| Test coverage | Partially implemented | Feature tests exist but many modules lack direct coverage. Thumbnail table registration passed; thumbnail route tests stalled at `TestClient` startup in this environment. |
 
 ## 23. Known issues and technical debt
 
@@ -501,9 +506,9 @@ No Dockerfile, compose file, Procfile, platform manifest, production Uvicorn/Gun
 | `app/api/v1/auth.py` | Password-reset token is placed in email body as a token, with no link generation in backend. | Client/product integration must safely construct reset flow and avoid token exposure in logs/analytics. |
 | `app/main.py`, `app/core/config.py` | CORS allows credentials and methods/origins solely from configuration; dev origin default is localhost. | Production must set a narrow origin list; source does not verify deployed CORS configuration. |
 | `backend/docs/README.md` | Describes `/instructors/applications` as student application route, but source uses `/auth/register/teacher`; instructors applications is admin-only listing. | Setup/API handoff can misdirect client implementation. |
-| Test suite | No direct tests found for several high-impact workflows (reset, assignment, certificate, resource routes, notification). | Regressions in these areas may go undetected. |
+| Test suite | No direct tests found for several high-impact workflows (reset, assignment, certificate, resource routes, notification). Thumbnail route tests are present, but the local `TestClient` startup stall prevented their execution through request handling. | Regressions in these areas may go undetected; rerun the route suite in a working test-client environment. |
 
-These items are static inspection findings. No tests, exploit attempts, or runtime checks were performed.
+These items are static source-inspection findings, not validated exploits. No security-focused testing was performed; test execution details are recorded in Section 19.
 
 ## 24. Important file reference
 
@@ -515,7 +520,7 @@ These items are static inspection findings. No tests, exploit attempts, or runti
 | Change database engine/session | `app/core/database.py`, `app/core/config.py` |
 | Change auth/JWT/passwords | `app/core/security.py`, `app/core/dependencies.py`, `app/services/auth_service.py`, `app/api/v1/auth.py` |
 | Change role/ownership rules | `app/core/permissions.py`, `app/services/course_service.py`, then affected routes |
-| Change course/modular curriculum behavior | `app/services/course_service.py`, `app/api/v1/courses.py`, `modules.py`, `lessons.py` |
+| Change course/modular curriculum or thumbnail behavior | `app/services/course_service.py`, `app/api/v1/courses.py`, `app/models/course_thumbnail.py`, `app/models/__init__.py`, `app/schemas/course.py`, `modules.py`, `lessons.py` |
 | Change payments | `app/services/payment_service.py`, `app/api/v1/payments.py`, `app/integrations/payments/` |
 | Change upload scope/signatures | `app/services/cloudinary_service.py`, `app/integrations/cloudinary.py`, feature route confirmation handler |
 | Change video progress/playback | `app/services/video_service.py`, `app/services/progress_service.py`, `app/api/v1/videos.py` |
