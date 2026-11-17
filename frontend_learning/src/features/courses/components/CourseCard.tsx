@@ -28,7 +28,7 @@ export function CourseCard({ course, categoryName, basePath }: CourseCardProps) 
       <article className="relative flex h-full flex-col overflow-hidden rounded-[24px] border border-surface-container bg-surface-container-lowest shadow-[0_8px_24px_rgba(18,18,20,0.04)] transition-all duration-300 ease-out hover:-translate-y-1.5 hover:border-primary/30 hover:shadow-[0_12px_30px_rgba(210,189,246,0.45)] group-focus-visible:ring-2 group-focus-visible:ring-primary">
         
         {/* Thumbnail Header */}
-        <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden bg-surface-container p-6">
+        <div className="relative aspect-[16/10] overflow-hidden bg-surface-container">
           
           {course.thumbnail_url ? (
             /* Render Image if it exists */
@@ -38,8 +38,8 @@ export function CourseCard({ course, categoryName, basePath }: CourseCardProps) 
               className="absolute inset-0 z-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
-            /* Fallback Design (Unchanged) */
-            <>
+            /* Fallback Design — centered inside its own layer so it looks the same */
+            <div className="flex h-full w-full items-center justify-center">
               {/* Subtle decorative radial glow & concentric rings using existing tokens */}
               <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full border border-outline/10 transition-transform duration-500 group-hover:scale-125" />
               <div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full bg-surface-container-lowest/40 transition-transform duration-500 group-hover:scale-110" />
@@ -48,17 +48,17 @@ export function CourseCard({ course, categoryName, basePath }: CourseCardProps) 
               <span className="select-none text-6xl font-black tracking-widest text-outline/20 transition-all duration-300 group-hover:scale-110 group-hover:text-primary/25">
                 {initials}
               </span>
-            </>
+            </div>
           )}
 
-          {/* Top-left Category Badge (Added z-10 to stay above image) */}
+          {/* Top-left Category Badge */}
           {categoryName && (
             <span className="absolute left-4 top-4 z-10 rounded-full bg-secondary-container px-3.5 py-1 text-[11px] font-extrabold tracking-wide text-on-secondary-container shadow-sm">
               {categoryName}
             </span>
           )}
 
-          {/* Bottom-right Level Pill (Added z-10 to stay above image) */}
+          {/* Bottom-right Level Pill */}
           <span className="absolute bottom-3.5 right-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-surface-container-lowest/90 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary shadow-sm backdrop-blur-sm">
             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             {LEVEL_LABEL[course.level] ?? course.level}

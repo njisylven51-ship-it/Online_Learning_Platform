@@ -32,7 +32,7 @@ export function ThumbnailUploader({ courseId, currentUrl, onUpdate }: ThumbnailU
       if (sig.api_key) formData.append('api_key', sig.api_key);
       if (sig.signature) formData.append('signature', sig.signature);
 
-      // Append signed params (skip signature, api_key, cloud_name, upload_url, public_id)
+      // Append signed params
       Object.keys(sig).forEach((key) => {
         if (!['signature', 'api_key', 'cloud_name', 'upload_url', 'public_id'].includes(key)) {
           const value = (sig as any)[key];
@@ -72,33 +72,49 @@ export function ThumbnailUploader({ courseId, currentUrl, onUpdate }: ThumbnailU
   }
 
   return (
-    <div className="space-y-4">
-      <label className="block text-sm font-bold text-carbon">Course Thumbnail</label>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-bold text-carbon">Course Thumbnail</label>
+        {currentUrl && !uploading && (
+          <button 
+            type="button"
+            onClick={handleDelete}
+            className="text-xs font-semibold text-error hover:underline"
+          >
+            Remove
+          </button>
+        )}
+      </div>
       
       {uploading ? (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-surface-container bg-surface-container-lowest">
-          <LoadingState message="Uploading image..." />
+        /* Simple Loader State */
+        <div className="flex h-12 items-center rounded-xl bg-surface-container-lowest border border-surface-container px-4">
+          <LoadingState message="Uploading..." />
         </div>
       ) : currentUrl ? (
+        /* Image Preview with clean overlay */
         <div className="relative overflow-hidden rounded-xl border border-surface-container bg-surface-container-lowest group">
-          <img src={currentUrl} alt="Course Thumbnail" className="aspect-video w-full object-cover" />
-          <div className="absolute inset-0 flex items-center justify-center gap-3 bg-carbon/50 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
-            <Button onClick={() => fileInputRef.current?.click()} className="rounded-lg bg-white text-carbon hover:bg-gray-200">Replace</Button>
-            <Button onClick={handleDelete} className="rounded-lg bg-error text-white hover:bg-error/90">Delete</Button>
+          <img 
+            src={currentUrl} 
+            alt="Course Thumbnail" 
+            className="aspect-video w-full object-cover transition-opacity group-hover:opacity-50" 
+          />
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+            <Button 
+              onClick={() => fileInputRef.current?.click()} 
+              className="rounded-lg bg-white/90 text-carbon shadow-sm backdrop-blur-sm hover:bg-white"
+            >
+              Replace Image
+            </Button>
           </div>
         </div>
       ) : (
+        /* Simple dashed line for empty state */
         <div 
           onClick={() => fileInputRef.current?.click()}
-          className="flex h-40 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-primary-container bg-primary-container/10 transition hover:bg-primary-container/20"
+          className="flex h-12 cursor-pointer items-center justify-center rounded-xl border border-dashed border-outline-variant/50 bg-transparent transition-colors hover:border-primary hover:bg-surface-container-lowest"
         >
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary-container text-on-primary-container">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <p className="text-sm font-bold text-carbon">Click to upload a thumbnail</p>
-          <p className="mt-1 text-xs font-medium text-on-surface-variant">Recommended: 1280x720 (16:9 ratio)</p>
+          <p className="text-sm font-medium text-on-surface-variant">Click to upload (16:9 recommended)</p>
         </div>
       )}
       
